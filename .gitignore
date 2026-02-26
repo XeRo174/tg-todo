@@ -1,0 +1,6 @@
+*.db
+*.log
+/.idea
+*.exe
+.env.local
+.env.*.local
