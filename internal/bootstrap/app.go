@@ -48,7 +48,8 @@ func App() Application {
 }
 
 func setupEnv() Environment {
-	_ = godotenv.Load()
+	_ = godotenv.Load(".env.local")
+	_ = godotenv.Load(".env")
 	env := Environment{}
 	ctx := context.Background()
 	if err := envconfig.Process(ctx, &env); err != nil {
@@ -102,6 +103,6 @@ func connectToDB(databaseFile string) *gorm.DB {
 	}); err != nil {
 		panic(err)
 	}
-	conn.AutoMigrate(&types.UserModel{}, &types.TaskThemeModel{}, &types.TaskModel{})
+	conn.AutoMigrate(&types.UserModel{}, &types.ThemeModel{}, &types.TaskModel{})
 	return conn
 }

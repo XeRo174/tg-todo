@@ -2,45 +2,8 @@ package types
 
 import (
 	"gorm.io/gorm"
-	"strings"
 	"time"
 )
-
-const (
-	TaskPriorityNone = iota
-	TaskPriorityNormal
-	TaskPriorityHigh
-)
-
-type Priority struct {
-	Name  string
-	Value int
-}
-
-var Priorities = []Priority{
-	{
-		Name:  "Без приоритета",
-		Value: TaskPriorityNone,
-	},
-	{
-		Name:  "Обычный",
-		Value: TaskPriorityNormal,
-	},
-	{
-		Name:  "Высокий приоритет",
-		Value: TaskPriorityHigh,
-	},
-}
-
-func GetPriorityByCallbackData(cbData string) Priority {
-	cbData = strings.Replace(cbData, "task_priority:", "", 1)
-	for _, priority := range Priorities {
-		if cbData == string(rune(priority.Value)) {
-			return priority
-		}
-	}
-	return Priority{}
-}
 
 type UserModel struct {
 	gorm.Model
@@ -49,12 +12,12 @@ type UserModel struct {
 	TimeZone string
 }
 
-type TaskThemeModel struct {
+type ThemeModel struct {
 	gorm.Model
-	Name        string
-	User        UserModel
-	UserId      uint
-	TaskModelID uint
+	Name   string
+	User   UserModel
+	UserId uint
+	Tasks  []TaskModel `gorm:"many2many:task_themes;"`
 }
 
 type TaskModel struct {
@@ -64,7 +27,7 @@ type TaskModel struct {
 	Priority int
 	User     UserModel
 	UserId   uint
-	Themes   []TaskThemeModel `gorm:"foreignKey:TaskModelID"`
+	Themes   []ThemeModel `gorm:"many2many:task_themes;"`
 	Deadline time.Time
 	Editable bool
 }

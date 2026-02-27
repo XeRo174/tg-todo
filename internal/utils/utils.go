@@ -3,7 +3,9 @@ package utils
 import (
 	"fmt"
 	"github.com/PaulSonOfLars/gotgbot/v2"
+	"strings"
 	"tg-todo/internal/types"
+	"unicode"
 )
 
 const (
@@ -24,4 +26,16 @@ func PriorityButtons() [][]gotgbot.InlineKeyboardButton {
 		})
 	}
 	return buttons
+}
+
+func FirstTitleLetter(stroke string) string {
+	if stroke == "" {
+		return ""
+	}
+	r := []rune(strings.ToLower(stroke))
+	first := r[0]
+	if unicode.IsLetter(first) {
+		r[0] = unicode.ToUpper(first)
+	}
+	return string(r)
 }
