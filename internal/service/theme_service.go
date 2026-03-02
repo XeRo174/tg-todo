@@ -13,25 +13,27 @@ import (
 // ConversationCreateThemeInit - обработчик разговора инициализации создания темы
 func (s *Service) ConversationCreateThemeInit(b *gotgbot.Bot, ctx *ext.Context) error {
 	if _, err := b.SendMessage(ctx.EffectiveSender.ChatId, "Введите имя темы", nil); err != nil {
-		return fmt.Errorf("ошибка отправки сообщения получения имени: %v", err)
+		return fmt.Errorf("отправка сообщения темы: %w", err)
 	}
-	return handlers.NextConversationState(utils.ConversationThemeCreateName)
+	return handlers.NextConversationState(types.ConversationNewThemeName)
 }
 
 // ConversationCreateThemeSetName - обработчик разговора получения имени темы
 func (s *Service) ConversationCreateThemeSetName(b *gotgbot.Bot, ctx *ext.Context) error {
 	user, err := s.Repository.GetUserByTGId(ctx.EffectiveSender.User.Id)
 	if err != nil {
-		return fmt.Errorf("ошибка получения пользователя: %v", err)
+		return fmt.Errorf("поиск пользователя по tg: %w", err)
 	}
 	newTheme := types.ThemeModel{
 		Name: utils.FirstTitleLetter(ctx.EffectiveMessage.Text),
 		User: user,
 	}
 	if err = s.Repository.CreateTheme(newTheme); err != nil {
-		return fmt.Errorf("ошибка создания темы: %v", err)
+		return fmt.Errorf("создание темы: %w", err)
 	}
-	b.SendMessage(ctx.EffectiveSender.ChatId, "Тема создана", nil)
+	if _, err = b.SendMessage(ctx.EffectiveSender.ChatId, "Тема создана", nil); err != nil {
+		return fmt.Errorf("отправка сообщения завершения создания: %w", err)
+	}
 	return handlers.EndConversation()
 }
 
@@ -39,7 +41,7 @@ func (s *Service) ConversationCreateThemeSetName(b *gotgbot.Bot, ctx *ext.Contex
 func (s *Service) CommandGetThemes(b *gotgbot.Bot, ctx *ext.Context) error {
 	themes, err := s.Repository.GetThemes(types.ThemeFilter{UserTGId: ctx.EffectiveSender.User.Id})
 	if err != nil {
-		return fmt.Errorf("ошибка получения тем: %v", err)
+		return fmt.Errorf("получение тем: %w", err)
 	}
 	var themeStroke []string
 	for _, theme := range themes {
@@ -52,7 +54,7 @@ func (s *Service) CommandGetThemes(b *gotgbot.Bot, ctx *ext.Context) error {
 		message = "Нет тем"
 	}
 	if _, err = b.SendMessage(ctx.EffectiveSender.ChatId, message, nil); err != nil {
-		return fmt.Errorf("ошибка отправки тем: %v", err)
+		return fmt.Errorf("отправка тем: %w", err)
 	}
 	return nil
 }

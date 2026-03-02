@@ -14,20 +14,19 @@ type UserModel struct {
 
 type ThemeModel struct {
 	gorm.Model
-	Name   string
+	Name   string `gorm:"uniqueIndex:idx_theme_user_name,priority:2,WHERE:deleted_at IS NULL"`
 	User   UserModel
-	UserId uint
+	UserId uint        `gorm:"uniqueIndex:idx_theme_user_name,priority:1,WHERE:deleted_at IS NULL"`
 	Tasks  []TaskModel `gorm:"many2many:task_themes;"`
 }
 
 type TaskModel struct {
 	gorm.Model
 	Name     string
-	Status   int
-	Priority int
+	Status   TaskStatus
+	Priority TaskPriority
 	User     UserModel
 	UserId   uint
 	Themes   []ThemeModel `gorm:"many2many:task_themes;"`
 	Deadline time.Time
-	Editable bool
 }

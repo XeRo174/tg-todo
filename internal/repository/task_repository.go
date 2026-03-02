@@ -12,18 +12,26 @@ func (r *Repository) GetTasks(filter types.TaskFilter) ([]types.TaskModel, error
 	query := r.Database.Model(&types.TaskModel{})
 	query = handleTaskPreload(query)
 	query = handleTaskFilters(query, filter)
+	if filter.Size < 1 {
+		filter.Size = 10
+	}
+	query = query.Limit(filter.Size)
+	if filter.Page > 1 {
+		query = query.Offset(int(filter.Page-1) * filter.Size)
+	}
 	err := query.Find(&tasks).Error
 	return tasks, err
 }
 
-// GetLastEditable - получить последнюю редактируемую задачу
-func (r *Repository) GetLastEditable(userTGId int64) (types.TaskModel, error) {
+// GetLastTaskDraft - получить последнюю редактируемую задачу
+func (r *Repository) GetLastTaskDraft(userTGId int64) (types.TaskModel, error) {
 	var task types.TaskModel
 	query := r.Database.Model(&types.TaskModel{})
 	query = handleTaskPreload(query)
-	query = query.Where("user_models.tg_id = ?", userTGId).
-		Where("task_models.editable=true")
-	err := r.Database.Last(&task).Error
+	query = query.
+		Where("user_models.tg_id = ?", userTGId).
+		Where("task_models.status=?", types.TaskStatusDraft)
+	err := query.Last(&task).Error
 	return task, err
 }
 
@@ -40,6 +48,11 @@ func (r *Repository) UpdateTask(task types.TaskModel) error {
 // UpdateTaskThemes - обновить темы задачи
 func (r *Repository) UpdateTaskThemes(task types.TaskModel, themes []types.ThemeModel) error {
 	return r.Database.Model(&task).Association("Themes").Replace(themes)
+}
+
+// DeleteTask - удалить задачу
+func (r *Repository) DeleteTask(id uint) error {
+	return r.Database.Delete(&types.TaskModel{}, id).Error
 }
 
 // handleTaskPreload - сформировать запрос подключения внешних таблиц к таблице задач и предварительно загрузить данные

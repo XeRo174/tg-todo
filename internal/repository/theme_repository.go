@@ -12,6 +12,13 @@ func (r *Repository) GetThemes(filter types.ThemeFilter) ([]types.ThemeModel, er
 	query := r.Database.Model(&types.ThemeModel{})
 	query = handleThemePreload(query)
 	query = handleThemeFilters(query, filter)
+	if filter.Size < 1 {
+		filter.Size = 10
+	}
+	query = query.Limit(filter.Size)
+	if filter.Page > 1 {
+		query = query.Offset(int(filter.Page-1) * filter.Size)
+	}
 	err := query.Find(&themes).Error
 	return themes, err
 }
@@ -24,6 +31,11 @@ func (r *Repository) CreateTheme(theme types.ThemeModel) error {
 // UpdateTheme - обновить тему
 func (r *Repository) UpdateTheme(theme types.ThemeModel) error {
 	return r.Database.Model(types.ThemeModel{}).Where("id = ?", theme.ID).Updates(theme).Error
+}
+
+// DeleteTheme - удалить тему
+func (r *Repository) DeleteTheme(id uint) error {
+	return r.Database.Delete(&types.ThemeModel{}, id).Error
 }
 
 // handleTaskPreload - сформировать запрос подключения внешних таблиц к таблице тем и предварительно загрузить данные

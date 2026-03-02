@@ -12,7 +12,6 @@ import (
 	"tg-todo/internal/bootstrap"
 	"tg-todo/internal/repository"
 	"tg-todo/internal/types"
-	"tg-todo/internal/utils"
 	"time"
 )
 
@@ -33,6 +32,7 @@ func NewService(r *repository.Repository, bot *gotgbot.Bot, app bootstrap.Applic
 //todo - перевести выбор тем на кнопки под сообщением с постраничным выбором. Реализация - заканчивается этап установки сроков задачи, получаю список первых N тем, формирую строчную клавиатуру с каждой темой как клавишу вида []Покупки,[]Учеба,[]Прочее.
 // Последняя строка набор клавиш - переключателей страниц вида <-,->. Нажатие на переключателей меняет кнопки Тем на следующие. Если нет прошлой или следующей страницы тем, то соответствующей кнопки нет.
 // Нажатие на кнопку темы редактирует текст сообщения добавляя туда выбранную тему и клавиша темы отмечается [x].
+// Для редактирования сообщения необходимо записать message_id. Необходима промежуточная таблица, в которой будет записываться message_id и task_id. В таком случае создание задачи будет происходить в Init функции разговора и имя задачи будет формировать просто по номеру.
 
 //todo - поиск удобной версии установки сроков задача. Текущая вариант не удобен и только выполняет свое предназначение. Нужен виджет/команда/кнопки где будет более подходящий способ установки сроков задач.
 
@@ -53,12 +53,11 @@ func NewService(r *repository.Repository, bot *gotgbot.Bot, app bootstrap.Applic
 // Иначе, если пользователь живет по GMT+5 и ставит сроки задачи 14:00:00, а Сервер будет работать в Москве, то он отправит уведомление "Остался час" в 13:00:00 по Москве, а у пользователя будет уже 15:00:00.
 // Для получения этих данных можно спросить у пользователя его текущее время в 24 часом варианте, так получим возможность сравнить его с gmt и установить в профиле пользователя.
 
-//todo - добавить уникальность Тем исходя из Имени и id пользователя.
-
 func (s *Service) Start() {
 	dispatcher := ext.NewDispatcher(&ext.DispatcherOpts{
 		Error: func(b *gotgbot.Bot, ctx *ext.Context, err error) ext.DispatcherAction {
-			logrus.Errorf("Ошибка во время обработки сообщения: %v", err)
+			//todo отправка сообщения пользователю
+			logrus.Errorf("Ошибка во время обработки сообщения: %+v", err)
 			return ext.DispatcherActionNoop
 		},
 		MaxRoutines: ext.DefaultMaxRoutines,
@@ -75,7 +74,7 @@ func (s *Service) Start() {
 	dispatcher.AddHandler(handlers.NewConversation(
 		[]ext.Handler{handlers.NewCommand("create_theme", s.ConversationCreateThemeInit)},
 		map[string][]ext.Handler{
-			utils.ConversationThemeCreateName: {handlers.NewMessage(noCommand, s.ConversationCreateThemeSetName)},
+			types.ConversationNewThemeName: {handlers.NewMessage(noCommand, s.ConversationCreateThemeSetName)},
 		}, &handlers.ConversationOpts{
 			Exits:        []ext.Handler{cancelCommand},
 			AllowReEntry: true,
@@ -84,13 +83,17 @@ func (s *Service) Start() {
 	dispatcher.AddHandler(handlers.NewConversation(
 		[]ext.Handler{handlers.NewCommand("create_task", s.ConversationCreateTaskInit)},
 		map[string][]ext.Handler{
-			utils.ConversationTaskCreateName:     {handlers.NewMessage(noCommand, s.ConversationCreateTaskSetName)},
-			utils.ConversationTaskCreatePriority: {handlers.NewCallback(callbackquery.Prefix("task_priority:"), s.ConversationCreateTaskSetPriority)},
-			utils.ConversationTaskCreateDeadline: {handlers.NewMessage(noCommand, s.ConversationCreateTaskSetDeadline)},
-			utils.ConversationTaskCreateTheme:    {handlers.NewMessage(noCommand, s.ConversationCreateTaskSetTheme)},
+			types.ConversationNewTaskName:        {handlers.NewMessage(noCommand, s.ConversationCreateTaskSetName)},
+			types.ConversationNewTaskPriority:    {handlers.NewCallback(callbackquery.Prefix("set_task_priority:"), s.ConversationCreateTaskSetPriority)},
+			types.ConversationNewTaskDeadline:    {handlers.NewMessage(noCommand, s.ConversationCreateTaskSetDeadline)},
+			types.ConversationNewTaskThemeChoose: {handlers.NewCallback(callbackquery.Prefix("set_task_theme:"), s.ConversationCreateTaskSetTheme)},
 		},
 		&handlers.ConversationOpts{
-			Exits:        []ext.Handler{cancelCommand},
+			Exits: []ext.Handler{
+				cancelCommand,
+				handlers.NewCallback(callbackquery.Equal("task_create_done"), s.ConversationCreateTaskDone),
+				handlers.NewCallback(callbackquery.Equal("task_create_cancel"), s.ConversationCreateTaskCancel),
+			},
 			AllowReEntry: true,
 			StateStorage: conversation.NewInMemoryStorage(conversation.KeyStrategySenderAndChat),
 		}))
@@ -119,16 +122,22 @@ func (s *Service) CommandStartHandler(b *gotgbot.Bot, ctx *ext.Context) error {
 		Username: ctx.EffectiveSender.User.Username,
 	}
 	if err := s.Repository.CreateUser(newUser); err != nil {
-		return fmt.Errorf("ошибка создания нового пользователя: %v", err)
+		return fmt.Errorf("создание нового пользователя: %w", err)
 	}
 	if _, err := b.SendMessage(ctx.EffectiveSender.ChatId, "Пользователь создан", nil); err != nil {
-		return fmt.Errorf("ошибка отправки стартового сообщения: %v", err)
+		return fmt.Errorf("отправка стартового сообщения: %w", err)
+	}
+	if err := s.CommandCommonValue(b, ctx); err != nil {
+		return fmt.Errorf("установка базовых тем: %w", err)
 	}
 	return nil
 }
 
 // CommandCancelHandler - обработчик отмены действий/разговора
 func (s *Service) CommandCancelHandler(b *gotgbot.Bot, ctx *ext.Context) error {
+	if _, err := b.SendMessage(ctx.EffectiveSender.ChatId, "Разговор завершен", nil); err != nil {
+		return fmt.Errorf("отправка сообщения отмены: %w", err)
+	}
 	return handlers.EndConversation()
 }
 
@@ -148,9 +157,15 @@ func (s *Service) CommandCommonValue(b *gotgbot.Bot, ctx *ext.Context) error {
 		User: user,
 		Name: "Прочее",
 	}
-	s.Repository.CreateTheme(theme1)
-	s.Repository.CreateTheme(theme2)
-	s.Repository.CreateTheme(theme3)
+	if err := s.Repository.CreateTheme(theme1); err != nil {
+		return fmt.Errorf("создание темы 1: %w", err)
+	}
+	if err := s.Repository.CreateTheme(theme2); err != nil {
+		return fmt.Errorf("создание темы 2: %w", err)
+	}
+	if err := s.Repository.CreateTheme(theme3); err != nil {
+		return fmt.Errorf("создание темы 3: %w", err)
+	}
 	return nil
 }
 

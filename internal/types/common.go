@@ -5,114 +5,80 @@ import (
 	"strings"
 )
 
+type TaskPriority int
+type TaskStatus int
+
 const (
-	TaskPriorityNone = 1 + iota
+	TaskPriorityNone TaskPriority = 1 + iota
 	TaskPriorityNormal
 	TaskPriorityHigh
 )
 
 const (
-	TaskStatusCreated = 1 + iota
+	TaskStatusDraft TaskStatus = 1 + iota
+	TaskStatusCreated
 	TaskStatusInWork
 	TaskStatusDone
 	TaskStatusFailed
 	TaskStatusDropped
 )
 
-type Status struct {
-	Name  string
-	Value int
+func (p TaskPriority) String() string {
+	switch p {
+	case TaskPriorityNone:
+		return "Без приоритета"
+	case TaskPriorityNormal:
+		return "Обычный"
+	case TaskPriorityHigh:
+		return "Высокий"
+	default:
+		return "Не указан"
+	}
 }
 
-type Priority struct {
-	Name  string
-	Value int
+func (s TaskStatus) String() string {
+	switch s {
+	case TaskStatusDraft:
+		return "Черновик"
+	case TaskStatusCreated:
+		return "Создана"
+	case TaskStatusInWork:
+		return "В работе"
+	case TaskStatusDone:
+		return "Выполнена"
+	case TaskStatusFailed:
+		return "Провалена"
+	case TaskStatusDropped:
+		return "Брошена"
+	default:
+		return "Не указан"
+	}
 }
 
-var Priorities = []Priority{
-	{
-		Name:  "Без приоритета",
-		Value: TaskPriorityNone,
-	},
-	{
-		Name:  "Обычный",
-		Value: TaskPriorityNormal,
-	},
-	{
-		Name:  "Высокий приоритет",
-		Value: TaskPriorityHigh,
-	},
+func AllPriorities() []TaskPriority {
+	return []TaskPriority{TaskPriorityNone, TaskPriorityNormal, TaskPriorityHigh}
 }
 
-var Statuses = []Status{
-	{
-		Name:  "Создана",
-		Value: TaskStatusCreated,
-	},
-	{
-		Name:  "В работе",
-		Value: TaskStatusInWork,
-	},
-	{
-		Name:  "Завершена",
-		Value: TaskStatusDone,
-	},
-	{
-		Name:  "Провалена",
-		Value: TaskStatusFailed,
-	},
-	{
-		Name:  "Заброшена",
-		Value: TaskStatusDropped,
-	},
+func AllStatuses() []TaskStatus {
+	return []TaskStatus{TaskStatusCreated, TaskStatusInWork, TaskStatusDone, TaskStatusFailed, TaskStatusDropped}
 }
 
-func GetPriorityByValue(value int) Priority {
-	for _, priority := range Priorities {
-		if priority.Value == value {
-			return priority
+func ParsePriority(s string) (TaskPriority, bool) {
+	s = strings.TrimPrefix(s, "set_task_priority:")
+	for _, p := range AllPriorities() {
+		if fmt.Sprintf("%d", p) == s {
+			return p, true
 		}
 	}
-	return Priority{
-		Name:  "Проблема определения",
-		Value: -1,
-	}
+	return -1, false
 }
 
-func GetPriorityByCallbackData(cbData string) Priority {
-	cbData = strings.Replace(cbData, "task_priority:", "", 1)
-	for _, priority := range Priorities {
-		if cbData == fmt.Sprintf("%d", priority.Value) {
-			return priority
+func ParseStatus(s string) (TaskStatus, bool) {
+	s = strings.TrimPrefix(s, "task_status:")
+	for _, p := range AllStatuses() {
+		if fmt.Sprintf("%d", p) == s {
+			return p, true
 		}
 	}
-	return Priority{
-		Name:  "Проблема определения",
-		Value: -1,
-	}
-}
-
-func GetStatusByValue(value int) Status {
-	for _, status := range Statuses {
-		if status.Value == value {
-			return status
-		}
-	}
-	return Status{
-		Name:  "Проблема определения",
-		Value: -1,
-	}
-}
-
-func GetStatusByCallbackData(cbData string) Status {
-	cbData = strings.Replace(cbData, "task_status:", "", 1)
-	for _, status := range Statuses {
-		if cbData == fmt.Sprintf("%d", status.Value) {
-			return status
-		}
-	}
-	return Status{
-		Name:  "Проблема определения",
-		Value: -1,
-	}
+	return -1, false
 }
