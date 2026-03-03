@@ -103,6 +103,6 @@ func connectToDB(databaseFile string) *gorm.DB {
 	}); err != nil {
 		panic(err)
 	}
-	conn.AutoMigrate(&types.UserModel{}, &types.ThemeModel{}, &types.TaskModel{})
+	conn.AutoMigrate(&types.UserModel{}, &types.ThemeModel{}, &types.TaskModel{}, &types.TaskMessageRegister{})
 	return conn
 }

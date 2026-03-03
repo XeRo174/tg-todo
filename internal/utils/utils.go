@@ -23,31 +23,17 @@ func PriorityButtons() [][]gotgbot.InlineKeyboardButton {
 	var buttons [][]gotgbot.InlineKeyboardButton
 	for _, priority := range types.AllPriorities() {
 		buttons = append(buttons, []gotgbot.InlineKeyboardButton{
-			{Text: priority.String(), CallbackData: fmt.Sprintf("set_task_priority:%d", priority)},
+			{Text: priority.String(), CallbackData: fmt.Sprintf("%s%d", types.CallbackTaskPrioritySet, priority)},
 		})
 	}
-	return buttons
-}
-
-func ThemesButton(themes []types.ThemeModel) [][]gotgbot.InlineKeyboardButton {
-	var buttons [][]gotgbot.InlineKeyboardButton
-	for _, theme := range themes {
-		buttons = append(buttons, []gotgbot.InlineKeyboardButton{
-			{Text: theme.Name, CallbackData: fmt.Sprintf("set_task_theme:%s", theme.Name)},
-		})
-	}
-	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
-		{Text: "<", CallbackData: fmt.Sprintf("change_theme_page:%d", 1)}, //todo установка страницы
-		{Text: ">", CallbackData: fmt.Sprintf("change_theme_page:%d", 1)},
-	})
 	return buttons
 }
 
 func TaskButtons() [][]gotgbot.InlineKeyboardButton {
 	var buttons [][]gotgbot.InlineKeyboardButton
 	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
-		{Text: "Создать", CallbackData: "task_create_done"},
-		{Text: "Отменить", CallbackData: "task_create_cancel"},
+		{Text: "Создать", CallbackData: types.CallbackTaskCreateDone},
+		{Text: "Отменить", CallbackData: types.CallbackTaskCreateCancel},
 	})
 	return buttons
 }
@@ -58,4 +44,21 @@ func ThemeStroke(themes []types.ThemeModel) string {
 		strokes = append(strokes, fmt.Sprintf("%s", theme.Name))
 	}
 	return strings.Join(strokes, ", ")
+}
+
+func TaskMessageExist(task types.TaskModel) (int64, bool) {
+	if len(task.Messages) == 0 {
+		return 0, false
+	}
+	return task.Messages[len(task.Messages)-1].BotMessageId, true
+}
+
+// Contains Вспомогательная функция для проверки наличия элемента в слайсе
+func Contains(slice []types.ThemeModel, item string) bool {
+	for _, s := range slice {
+		if s.Name == item {
+			return true
+		}
+	}
+	return false
 }

@@ -36,8 +36,8 @@ func (r *Repository) GetLastTaskDraft(userTGId int64) (types.TaskModel, error) {
 }
 
 // CreateTask - создать задачу
-func (r *Repository) CreateTask(task types.TaskModel) error {
-	return r.Database.Create(&task).Error
+func (r *Repository) CreateTask(task types.TaskModel) (types.TaskModel, error) {
+	return task, r.Database.Create(&task).Error
 }
 
 // UpdateTask - обновить данные задачи
@@ -55,13 +55,20 @@ func (r *Repository) DeleteTask(id uint) error {
 	return r.Database.Delete(&types.TaskModel{}, id).Error
 }
 
+func (r *Repository) WriteTaskMessage(taskMessage types.TaskMessageRegister) error {
+	return r.Database.Create(&taskMessage).Error
+}
+
 // handleTaskPreload - сформировать запрос подключения внешних таблиц к таблице задач и предварительно загрузить данные
 func handleTaskPreload(query *gorm.DB) *gorm.DB {
 	query = query.
 		Joins("left join user_models on user_models.id = task_models.user_id").
 		Joins("left join task_themes on task_themes.theme_model_id = task_models.id").
 		Joins("left join theme_models on theme_models.id = task_themes.theme_model_id")
-	query = query.Preload("Themes")
+	query = query.
+		Preload("Themes").
+		Preload("Messages")
+
 	return query
 }
 

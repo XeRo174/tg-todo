@@ -3,6 +3,7 @@ package repository
 import (
 	"fmt"
 	"gorm.io/gorm"
+	"math"
 	"tg-todo/internal/types"
 )
 
@@ -21,6 +22,15 @@ func (r *Repository) GetThemes(filter types.ThemeFilter) ([]types.ThemeModel, er
 	}
 	err := query.Find(&themes).Error
 	return themes, err
+}
+
+func (r *Repository) GetThemePages(filter types.ThemeFilter) (float64, error) {
+	var count int64
+	query := r.Database.Model(&types.ThemeModel{})
+	query = handleThemePreload(query)
+	query = handleThemeFilters(query, filter)
+	err := query.Count(&count).Error
+	return math.Ceil(float64(count) / float64(filter.Size)), err
 }
 
 // CreateTheme - создать тему

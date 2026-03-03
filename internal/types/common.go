@@ -64,7 +64,7 @@ func AllStatuses() []TaskStatus {
 }
 
 func ParsePriority(s string) (TaskPriority, bool) {
-	s = strings.TrimPrefix(s, "set_task_priority:")
+	s = strings.TrimPrefix(s, CallbackTaskPrioritySet)
 	for _, p := range AllPriorities() {
 		if fmt.Sprintf("%d", p) == s {
 			return p, true
@@ -74,7 +74,7 @@ func ParsePriority(s string) (TaskPriority, bool) {
 }
 
 func ParseStatus(s string) (TaskStatus, bool) {
-	s = strings.TrimPrefix(s, "task_status:")
+	s = strings.TrimPrefix(s, CallbackTaskStatusSet)
 	for _, p := range AllStatuses() {
 		if fmt.Sprintf("%d", p) == s {
 			return p, true
