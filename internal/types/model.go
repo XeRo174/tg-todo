@@ -29,12 +29,13 @@ type TaskModel struct {
 	UserId   uint
 	Themes   []ThemeModel `gorm:"many2many:task_themes;"`
 	Deadline time.Time
-	Messages []TaskMessageRegister `gorm:"foreignkey:TaskId"`
+	Messages []MessageRegisterModel `gorm:"foreignkey:TaskId"`
 }
 
-type TaskMessageRegister struct {
+type MessageRegisterModel struct {
 	gorm.Model
 	BotMessageId int64
 	Task         TaskModel
 	TaskId       uint
+	Operation    string
 }

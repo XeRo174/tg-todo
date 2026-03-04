@@ -2,7 +2,27 @@ package types
 
 // Список констант определяющих этапы разговоров
 const (
-	ConversationNewThemeName = "conversation_new_theme_name"
+	ConversationThemeCreateInit    = "conversation_theme_create_init"
+	ConversationThemeCreateSetName = "conversation_theme_create_set_name"
+
+	ConversationThemeEditInit        = "conversation_theme_edit_init"
+	ConversationThemeEditChooseTheme = "conversation_theme_edit_choose_theme"
+	ConversationThemeEditSetName     = "conversation_theme_edit_set_name"
+
+	ConversationTaskCreateInit         = "conversation_task_create_init"
+	ConversationTaskCreateSetName      = "conversation_task_create_set_name"
+	ConversationTaskCreateSetPriority  = "conversation_task_create_set_priority"
+	ConversationTaskCreateSetDeadline  = "conversation_task_create_set_deadline"
+	ConversationTaskCreateSetTheme     = "conversation_task_create_set_theme"
+	ConversationTaskCreateSetThemeDone = "conversation_task_create_set_theme_done"
+
+	ConversationTaskEditInit         = "conversation_task_edit_init"
+	ConversationTaskEditChooseTask   = "conversation_task_edit_choose_task"
+	ConversationTaskEditSetName      = "conversation_task_edit_set_name"
+	ConversationTaskEditSetPriority  = "conversation_task_edit_set_priority"
+	ConversationTaskEditSetDeadline  = "conversation_task_edit_set_deadline"
+	ConversationTaskEditSetTheme     = "conversation_task_edit_set_theme"
+	ConversationTaskEditSetThemeDone = "conversation_task_edit_set_theme_done"
 
 	ConversationNewTaskName        = "conversation_new_task_name"
 	ConversationNewTaskPriority    = "conversation_new_task_priority"
@@ -12,6 +32,9 @@ const (
 
 // Список констант определяющих ключи callback
 const (
+	CallbackThemeEditChooseTheme      = "theme_edit_choose_theme:"
+	CallbackThemeEditChangeThemesPage = "theme_edit_change_themes_page:"
+
 	CallbackTaskPrioritySet      = "set_task_priority:"
 	CallbackTaskStatusSet        = "set_task_status:"
 	CallbackTaskThemeChoose      = "set_task_theme:"
@@ -20,8 +43,21 @@ const (
 	CallbackThemeChoseDone       = "chose_theme_done"
 	CallbackTaskCreateDone       = "create_task_done"
 	CallbackTaskCreateCancel     = "create_task_cancel"
+	CallbackTaskFieldSkip        = "edit_task_field_skip:"
+)
+
+// Список констант определяющих команды
+const (
+	CommandThemeCreateInit = "create_theme"
+	CommandThemeEditInit   = "edit_theme"
+	CommandTaskCreateInit  = "create_task"
 )
 
 const (
-	TimeLayout = "2006-01-02 15:04:05"
+	TimeLayout        = "2006-01-02 15:04:05"
+	ThemeKeyboardSize = 3
+	UnlimitedSize     = -1
+
+	MessageRegisterOperationCreate = "create"
+	MessageRegisterOperationEdit   = "edit"
 )

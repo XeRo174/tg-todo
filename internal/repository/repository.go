@@ -35,7 +35,7 @@ func wrapCondition(likeSearch bool, value string) (string, string) {
 
 // setPagination - устанавливает лимит выводимых данных
 func setPagination(query *gorm.DB, size int, page uint) *gorm.DB {
-	query = query.Limit(size).Limit(size)
+	query = query.Limit(size)
 	if page > 1 {
 		query = query.Offset(int(page-1) * size)
 	}

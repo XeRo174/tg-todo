@@ -15,23 +15,27 @@ import (
 	"time"
 )
 
+// ThemeSession - структура для хранения сессии редактирования или создания темы
+type ThemeSession struct {
+	ThemeId   uint
+	MessageId int64
+}
+
 type Service struct {
-	Repository *repository.Repository
-	Bot        *gotgbot.Bot
-	App        bootstrap.Application
+	Repository        *repository.Repository
+	Bot               *gotgbot.Bot
+	App               bootstrap.Application
+	ThemeEditSessions map[int64]ThemeSession
 }
 
 func NewService(r *repository.Repository, bot *gotgbot.Bot, app bootstrap.Application) *Service {
 	return &Service{
-		Repository: r,
-		Bot:        bot,
-		App:        app,
+		Repository:        r,
+		Bot:               bot,
+		App:               app,
+		ThemeEditSessions: make(map[int64]ThemeSession),
 	}
 }
-
-//todo - перевести выбор тем на кнопки под сообщением с постраничным выбором. Реализация - заканчивается этап установки сроков задачи, получаю список первых N тем, формирую строчную клавиатуру с каждой темой как клавишу вида []Покупки,[]Учеба,[]Прочее.
-// Последняя строка набор клавиш - переключателей страниц вида <-,->. Нажатие на переключателей меняет кнопки Тем на следующие. Если нет прошлой или следующей страницы тем, то соответствующей кнопки нет.
-// Нажатие на кнопку темы редактирует текст сообщения добавляя туда выбранную тему и клавиша темы отмечается [x].
 
 //todo - поиск удобной версии установки сроков задача. Текущая вариант не удобен и только выполняет свое предназначение. Нужен виджет/команда/кнопки где будет более подходящий способ установки сроков задач.
 
@@ -70,25 +74,53 @@ func (s *Service) Start() {
 	dispatcher.AddHandler(handlers.NewCommand("get_themes", s.CommandGetThemes))
 	dispatcher.AddHandler(handlers.NewCommand("get_tasks", s.CommandGetTasks))
 
+	//Разговор создания новой темы
 	dispatcher.AddHandler(handlers.NewConversation(
-		[]ext.Handler{handlers.NewCommand("create_theme", s.ConversationCreateThemeInit)},
+		[]ext.Handler{handlers.NewCommand(types.CommandThemeCreateInit, s.ConversationCreateThemeInit)},
 		map[string][]ext.Handler{
-			types.ConversationNewThemeName: {handlers.NewMessage(noCommand, s.ConversationCreateThemeSetName)},
+			types.ConversationThemeCreateSetName: {handlers.NewMessage(noCommand, s.ConversationCreateThemeSetName)},
 		}, &handlers.ConversationOpts{
 			Exits:        []ext.Handler{cancelCommand},
 			AllowReEntry: true,
 			StateStorage: conversation.NewInMemoryStorage(conversation.KeyStrategySenderAndChat),
 		}))
+	//Разговор редактирования темы
+	dispatcher.AddHandler(handlers.NewConversation(
+		[]ext.Handler{handlers.NewCommand(types.CommandThemeEditInit, s.ConversationEditThemeInit)},
+		map[string][]ext.Handler{
+			types.ConversationThemeEditChooseTheme: {
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackThemeEditChooseTheme), s.ConversationEditThemeChoseTheme),
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackThemeEditChangeThemesPage), s.ConversationEditThemeChangeThemesPage),
+			},
+			types.ConversationThemeEditSetName: {handlers.NewMessage(noCommand, s.ConversationEditThemeSetName)},
+		},
+		&handlers.ConversationOpts{
+			Exits:        []ext.Handler{cancelCommand},
+			AllowReEntry: true,
+			StateStorage: conversation.NewInMemoryStorage(conversation.KeyStrategySenderAndChat),
+		},
+	))
+
 	dispatcher.AddHandler(handlers.NewConversation(
 		[]ext.Handler{handlers.NewCommand("create_task", s.ConversationCreateTaskInit)},
 		map[string][]ext.Handler{
-			types.ConversationNewTaskName:     {handlers.NewMessage(noCommand, s.ConversationCreateTaskSetName)},
-			types.ConversationNewTaskPriority: {handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskPrioritySet), s.ConversationCreateTaskSetPriority)},
-			types.ConversationNewTaskDeadline: {handlers.NewMessage(noCommand, s.ConversationCreateTaskSetDeadline)},
+			types.ConversationNewTaskName: {
+				handlers.NewMessage(noCommand, s.ConversationCreateTaskSetName),
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.ConversationCreateTaskSkipField),
+			},
+			types.ConversationNewTaskPriority: {
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskPrioritySet), s.ConversationCreateTaskSetPriority),
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.ConversationCreateTaskSkipField),
+			},
+			types.ConversationNewTaskDeadline: {
+				handlers.NewMessage(noCommand, s.ConversationCreateTaskSetDeadline),
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.ConversationCreateTaskSkipField),
+			},
 			types.ConversationNewTaskThemeChoose: {
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskThemeChoose), s.ConversationCreateTaskSetTheme),
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackChangeTaskThemesPage), s.ConversationCreateTaskChangePage),
 				handlers.NewCallback(callbackquery.Equal(types.CallbackThemeChoseDone), s.ConversationCreateTaskDoneTheme),
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.ConversationCreateTaskSkipField),
 			},
 		},
 		&handlers.ConversationOpts{
@@ -168,19 +200,19 @@ func (s *Service) CommandCommonValue(b *gotgbot.Bot, ctx *ext.Context) error {
 		User: user,
 		Name: "Прочее",
 	}
-	if err := s.Repository.CreateTheme(theme1); err != nil {
+	if _, err := s.Repository.CreateTheme(theme1); err != nil {
 		return fmt.Errorf("создание темы 1: %w", err)
 	}
-	if err := s.Repository.CreateTheme(theme2); err != nil {
+	if _, err := s.Repository.CreateTheme(theme2); err != nil {
 		return fmt.Errorf("создание темы 2: %w", err)
 	}
-	if err := s.Repository.CreateTheme(theme3); err != nil {
+	if _, err := s.Repository.CreateTheme(theme3); err != nil {
 		return fmt.Errorf("создание темы 3: %w", err)
 	}
-	if err := s.Repository.CreateTheme(theme4); err != nil {
+	if _, err := s.Repository.CreateTheme(theme4); err != nil {
 		return fmt.Errorf("создание темы 4: %w", err)
 	}
-	if err := s.Repository.CreateTheme(theme5); err != nil {
+	if _, err := s.Repository.CreateTheme(theme5); err != nil {
 		return fmt.Errorf("создание темы 5: %w", err)
 	}
 	return nil

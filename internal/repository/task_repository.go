@@ -3,6 +3,7 @@ package repository
 import (
 	"fmt"
 	"gorm.io/gorm"
+	"math"
 	"tg-todo/internal/types"
 )
 
@@ -12,26 +13,55 @@ func (r *Repository) GetTasks(filter types.TaskFilter) ([]types.TaskModel, error
 	query := r.Database.Model(&types.TaskModel{})
 	query = handleTaskPreload(query)
 	query = handleTaskFilters(query, filter)
-	if filter.Size < 1 {
-		filter.Size = 10
-	}
-	query = query.Limit(filter.Size)
-	if filter.Page > 1 {
-		query = query.Offset(int(filter.Page-1) * filter.Size)
-	}
+	query = setPagination(query, filter.Size, filter.Page)
 	err := query.Find(&tasks).Error
 	return tasks, err
 }
 
-// GetLastTaskDraft - получить последнюю редактируемую задачу
+func (r *Repository) GetTaskPages(filter types.TaskFilter) (float64, error) {
+	var count int64
+	query := r.Database.Model(&types.TaskModel{})
+	query = handleTaskPreload(query)
+	query = handleTaskFilters(query, filter)
+	err := query.Count(&count).Error
+	return math.Ceil(float64(count) / float64(filter.Size)), err
+}
+
+// GetLastTaskDraft - получить последнюю созданную задачу черновик
 func (r *Repository) GetLastTaskDraft(userTGId int64) (types.TaskModel, error) {
 	var task types.TaskModel
 	query := r.Database.Model(&types.TaskModel{})
 	query = handleTaskPreload(query)
 	query = query.
 		Where("user_models.tg_id = ?", userTGId).
-		Where("task_models.status=?", types.TaskStatusDraft)
+		Where("task_models.status=?", types.TaskStatusDraft).
+		Where("task_message_register_models.operation=?", types.MessageRegisterOperationCreate)
+	query = query.Order("task_models.updated_at desc")
 	err := query.Last(&task).Error
+	return task, err
+}
+
+// GetLastTaskEditable - получить последнюю редактируемую задачу
+func (r *Repository) GetLastTaskEditable(userTGId int64) (types.TaskModel, error) {
+	var task types.TaskModel
+	query := r.Database.Model(&types.TaskModel{})
+	query = handleTaskPreload(query)
+	query = query.
+		Where("user_models.tg_id = ?", userTGId).
+		Where("task_message_register_models.operation=?", types.MessageRegisterOperationEdit)
+	query = query.Order("task_models.updated_at desc")
+	err := query.Last(&task).Error
+	return task, err
+}
+
+func (r *Repository) GetTaskById(userTGId int64, taskId uint) (types.TaskModel, error) {
+	var task types.TaskModel
+	query := r.Database.Model(&types.TaskModel{})
+	query = handleTaskPreload(query)
+	query = query.
+		Where("task_models.id=?", taskId).
+		Where("user_models.tg_id=?", userTGId)
+	err := query.First(&task).Error
 	return task, err
 }
 
@@ -55,8 +85,17 @@ func (r *Repository) DeleteTask(id uint) error {
 	return r.Database.Delete(&types.TaskModel{}, id).Error
 }
 
-func (r *Repository) WriteTaskMessage(taskMessage types.TaskMessageRegister) error {
+func (r *Repository) WriteTaskMessage(taskMessage types.MessageRegisterModel) error {
 	return r.Database.Create(&taskMessage).Error
+}
+
+// todo условия обновления? message id полностью уникальное? можно ли использовать только его для поиска
+func (r *Repository) UpdateTaskMessageByMessageIdAndTaskId(taskMessage types.MessageRegisterModel) error {
+	return r.Database.Model(types.MessageRegisterModel{}).
+		Joins("left join task_models on task_models.tg_id = task_message_register_models.task_id").
+		Where("id=?", taskMessage.ID).
+		Where("task_message_register_models.bot_message_id=?", taskMessage.BotMessageId).
+		Updates(taskMessage).Error
 }
 
 // handleTaskPreload - сформировать запрос подключения внешних таблиц к таблице задач и предварительно загрузить данные
@@ -64,7 +103,9 @@ func handleTaskPreload(query *gorm.DB) *gorm.DB {
 	query = query.
 		Joins("left join user_models on user_models.id = task_models.user_id").
 		Joins("left join task_themes on task_themes.theme_model_id = task_models.id").
-		Joins("left join theme_models on theme_models.id = task_themes.theme_model_id")
+		Joins("left join theme_models on theme_models.id = task_themes.theme_model_id").
+		Joins("left join task_message_register_models on task_message_register_models.task_id=task_models.id")
+
 	query = query.
 		Preload("Themes").
 		Preload("Messages")

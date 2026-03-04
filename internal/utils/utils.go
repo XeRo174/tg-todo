@@ -29,11 +29,12 @@ func PriorityButtons() [][]gotgbot.InlineKeyboardButton {
 	return buttons
 }
 
-func TaskButtons() [][]gotgbot.InlineKeyboardButton {
+func TaskButtons(nextField string) [][]gotgbot.InlineKeyboardButton {
 	var buttons [][]gotgbot.InlineKeyboardButton
 	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
-		{Text: "Создать", CallbackData: types.CallbackTaskCreateDone},
-		{Text: "Отменить", CallbackData: types.CallbackTaskCreateCancel},
+		{Text: "Создать", CallbackData: types.CallbackTaskCreateDone},                                        // Создать задачу
+		{Text: "Пропустить поле", CallbackData: fmt.Sprintf("%s%s", types.CallbackTaskFieldSkip, nextField)}, //Пропустить поле
+		{Text: "Отменить", CallbackData: types.CallbackTaskCreateCancel},                                     //Бросить создание
 	})
 	return buttons
 }
@@ -46,11 +47,13 @@ func ThemeStroke(themes []types.ThemeModel) string {
 	return strings.Join(strokes, ", ")
 }
 
-func TaskMessageExist(task types.TaskModel) (int64, bool) {
-	if len(task.Messages) == 0 {
-		return 0, false
+func TaskMessageExist(task types.TaskModel, operation string) (types.MessageRegisterModel, bool) {
+	for i := len(task.Messages) - 1; i >= 0; i-- {
+		if task.Messages[i].Operation == operation {
+			return task.Messages[i], true
+		}
 	}
-	return task.Messages[len(task.Messages)-1].BotMessageId, true
+	return task.Messages[len(task.Messages)-1], true
 }
 
 // Contains Вспомогательная функция для проверки наличия элемента в слайсе

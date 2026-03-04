@@ -1,10 +1,12 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers"
+	"gorm.io/gorm"
 	"strconv"
 	"strings"
 	"tg-todo/internal/types"
@@ -18,7 +20,21 @@ func TaskMessageFill(title, ending string, task types.TaskModel, themes []types.
 
 // ConversationCreateTaskInit - обработчик разговора инициализации создания задачи
 func (s *Service) ConversationCreateTaskInit(b *gotgbot.Bot, ctx *ext.Context) error {
-	tasks, err := s.Repository.GetTasks(types.TaskFilter{UserTGId: ctx.EffectiveSender.User.Id})
+	lastTask, err := s.Repository.GetLastTaskDraft(ctx.EffectiveSender.User.Id)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return fmt.Errorf("поиск последней новой задачи: %w", err)
+	}
+	messageRegister, ok := utils.TaskMessageExist(lastTask, types.MessageRegisterOperationCreate)
+	if ok {
+		message := TaskMessageFill("Задача", "отмена прошлых действий", lastTask, lastTask.Themes)
+		if _, _, err = b.EditMessageText(message, &gotgbot.EditMessageTextOpts{
+			MessageId: messageRegister.BotMessageId,
+			ChatId:    ctx.EffectiveSender.ChatId,
+		}); err != nil {
+			return fmt.Errorf("изменение сообщения задачи: %w", err)
+		}
+	}
+	tasks, err := s.Repository.GetTasks(types.TaskFilter{UserTGId: ctx.EffectiveSender.User.Id, SortQuery: types.SortQuery{Size: types.UnlimitedSize, Page: 1}})
 	if err != nil {
 		return fmt.Errorf("получение задач: %w", err)
 	}
@@ -38,14 +54,14 @@ func (s *Service) ConversationCreateTaskInit(b *gotgbot.Bot, ctx *ext.Context) e
 	message := TaskMessageFill("Создание задачи", "Введите имя задачи", createdTask, nil)
 	taskMessage, err := b.SendMessage(ctx.EffectiveSender.ChatId, message, &gotgbot.SendMessageOpts{
 		ReplyMarkup: gotgbot.InlineKeyboardMarkup{
-			InlineKeyboard: utils.TaskButtons(),
+			InlineKeyboard: utils.TaskButtons(types.ConversationNewTaskPriority),
 		},
 	})
 	if err != nil {
 		return fmt.Errorf("отправка сообщения задачи: %w", err)
 	}
-	if err = s.Repository.WriteTaskMessage(types.TaskMessageRegister{TaskId: createdTask.ID, BotMessageId: taskMessage.MessageId}); err != nil {
-		return fmt.Errorf("запись сообщения задачи: %w", err)
+	if err = s.Repository.WriteTaskMessage(types.MessageRegisterModel{TaskId: createdTask.ID, BotMessageId: taskMessage.MessageId, Operation: types.MessageRegisterOperationCreate}); err != nil {
+		return fmt.Errorf("запись сообщения создания задачи: %w", err)
 	}
 	return handlers.NextConversationState(types.ConversationNewTaskName)
 }
@@ -54,22 +70,22 @@ func (s *Service) ConversationCreateTaskInit(b *gotgbot.Bot, ctx *ext.Context) e
 func (s *Service) ConversationCreateTaskSetName(b *gotgbot.Bot, ctx *ext.Context) error {
 	lastTask, err := s.Repository.GetLastTaskDraft(ctx.EffectiveSender.User.Id)
 	if err != nil {
-		return fmt.Errorf("поиск последней задачи: %w", err)
+		return fmt.Errorf("поиск последней новой задачи: %w", err)
 	}
-	messageId, ok := utils.TaskMessageExist(lastTask)
+	messageRegister, ok := utils.TaskMessageExist(lastTask, types.MessageRegisterOperationCreate)
 	if !ok {
 		return fmt.Errorf("сообщение задачи не найдено")
 	}
 	lastTask.Name = ctx.EffectiveMessage.Text
 	if err = s.Repository.UpdateTask(lastTask); err != nil {
-		return fmt.Errorf("обновление сроков задачи: %w", err)
+		return fmt.Errorf("обновление имени задачи: %w", err)
 	}
 	message := TaskMessageFill("Создание задачи", "Выберите приоритет", lastTask, lastTask.Themes)
 	if _, _, err = b.EditMessageText(message, &gotgbot.EditMessageTextOpts{
-		MessageId: messageId,
+		MessageId: messageRegister.BotMessageId,
 		ChatId:    ctx.EffectiveSender.ChatId,
 		ReplyMarkup: gotgbot.InlineKeyboardMarkup{
-			InlineKeyboard: append(utils.PriorityButtons(), utils.TaskButtons()...),
+			InlineKeyboard: append(utils.PriorityButtons(), utils.TaskButtons(types.ConversationNewTaskDeadline)...),
 		},
 	}); err != nil {
 		return fmt.Errorf("изменение сообщения задачи: %w", err)
@@ -92,9 +108,9 @@ func (s *Service) ConversationCreateTaskSetPriority(b *gotgbot.Bot, ctx *ext.Con
 	}
 	lastTask, err := s.Repository.GetLastTaskDraft(ctx.EffectiveSender.User.Id)
 	if err != nil {
-		return fmt.Errorf("поиск последней задачи: %w", err)
+		return fmt.Errorf("поиск последней новой задачи: %w", err)
 	}
-	messageId, ok := utils.TaskMessageExist(lastTask)
+	messageRegister, ok := utils.TaskMessageExist(lastTask, types.MessageRegisterOperationCreate)
 	if !ok {
 		return fmt.Errorf("сообщение задачи не найдено")
 	}
@@ -104,10 +120,10 @@ func (s *Service) ConversationCreateTaskSetPriority(b *gotgbot.Bot, ctx *ext.Con
 	}
 	message := TaskMessageFill("Создание задачи", fmt.Sprintf("Введите срок в формате %s", types.TimeLayout), lastTask, lastTask.Themes)
 	if _, _, err = b.EditMessageText(message, &gotgbot.EditMessageTextOpts{
-		MessageId: messageId,
+		MessageId: messageRegister.BotMessageId,
 		ChatId:    ctx.EffectiveSender.ChatId,
 		ReplyMarkup: gotgbot.InlineKeyboardMarkup{
-			InlineKeyboard: utils.TaskButtons(),
+			InlineKeyboard: utils.TaskButtons(types.ConversationNewTaskThemeChoose),
 		},
 		//todo inline keyboard календарь + время
 	}); err != nil {
@@ -127,9 +143,9 @@ func (s *Service) ConversationCreateTaskSetDeadline(b *gotgbot.Bot, ctx *ext.Con
 	}
 	lastTask, err := s.Repository.GetLastTaskDraft(ctx.EffectiveSender.User.Id)
 	if err != nil {
-		return fmt.Errorf("поиск последней задачи: %w", err)
+		return fmt.Errorf("поиск последней новой задачи: %w", err)
 	}
-	messageId, ok := utils.TaskMessageExist(lastTask)
+	messageRegister, ok := utils.TaskMessageExist(lastTask, types.MessageRegisterOperationCreate)
 	if !ok {
 		return fmt.Errorf("сообщение задачи не найдено")
 	}
@@ -137,7 +153,7 @@ func (s *Service) ConversationCreateTaskSetDeadline(b *gotgbot.Bot, ctx *ext.Con
 	if err = s.Repository.UpdateTask(lastTask); err != nil {
 		return fmt.Errorf("обновление сроков задачи: %w", err)
 	}
-	themeFilter := types.ThemeFilter{UserTGId: ctx.EffectiveSender.User.Id, SortQuery: types.SortQuery{Size: 2, Page: 1}}
+	themeFilter := types.ThemeFilter{UserTGId: ctx.EffectiveSender.User.Id, SortQuery: types.SortQuery{Size: types.ThemeKeyboardSize, Page: 1}}
 	themes, err := s.Repository.GetThemes(themeFilter)
 	if err != nil {
 		return fmt.Errorf("получение тем для клавиатуры: %w", err)
@@ -148,7 +164,7 @@ func (s *Service) ConversationCreateTaskSetDeadline(b *gotgbot.Bot, ctx *ext.Con
 	}
 	message := TaskMessageFill("Создание задачи", fmt.Sprintf("Выберите темы.\nСтраница: (%d/%v)", themeFilter.Page, themesPagesCount), lastTask, lastTask.Themes)
 	if _, _, err = b.EditMessageText(message, &gotgbot.EditMessageTextOpts{
-		MessageId: messageId,
+		MessageId: messageRegister.BotMessageId,
 		ChatId:    ctx.EffectiveSender.ChatId,
 		ReplyMarkup: gotgbot.InlineKeyboardMarkup{
 			InlineKeyboard: s.CreateThemeInlineKeyboard(lastTask, themes, 1, themesPagesCount),
@@ -189,7 +205,7 @@ func (s *Service) ConversationCreateTaskSetTheme(b *gotgbot.Bot, ctx *ext.Contex
 		}
 	}
 
-	themeFilter := types.ThemeFilter{UserTGId: ctx.EffectiveSender.User.Id, SortQuery: types.SortQuery{Size: 2, Page: currentPage}}
+	themeFilter := types.ThemeFilter{UserTGId: ctx.EffectiveSender.User.Id, SortQuery: types.SortQuery{Size: types.ThemeKeyboardSize, Page: currentPage}}
 	allThemes, err := s.Repository.GetThemes(themeFilter)
 	if err != nil {
 		return fmt.Errorf("получение тем для клавиатуры: %w", err)
@@ -212,9 +228,9 @@ func (s *Service) ConversationCreateTaskSetTheme(b *gotgbot.Bot, ctx *ext.Contex
 	}
 	lastTask, err := s.Repository.GetLastTaskDraft(ctx.EffectiveSender.User.Id)
 	if err != nil {
-		return fmt.Errorf("поиск последней задачи: %w", err)
+		return fmt.Errorf("поиск последней новой задачи: %w", err)
 	}
-	messageId, ok := utils.TaskMessageExist(lastTask)
+	messageRegister, ok := utils.TaskMessageExist(lastTask, types.MessageRegisterOperationCreate)
 	if !ok {
 		return fmt.Errorf("сообщение задачи не найдено")
 	}
@@ -224,7 +240,7 @@ func (s *Service) ConversationCreateTaskSetTheme(b *gotgbot.Bot, ctx *ext.Contex
 	}
 	message := TaskMessageFill("Создание задачи", fmt.Sprintf("Выберите темы.\nСтраница: (%d/%v)", themeFilter.Page, themesPagesCount), lastTask, lastTask.Themes)
 	if _, _, err = b.EditMessageText(message, &gotgbot.EditMessageTextOpts{
-		MessageId: messageId,
+		MessageId: messageRegister.BotMessageId,
 		ChatId:    ctx.EffectiveSender.ChatId,
 		ReplyMarkup: gotgbot.InlineKeyboardMarkup{
 			InlineKeyboard: s.CreateThemeInlineKeyboard(lastTask, allThemes, currentPage, themesPagesCount),
@@ -235,6 +251,7 @@ func (s *Service) ConversationCreateTaskSetTheme(b *gotgbot.Bot, ctx *ext.Contex
 	return handlers.NextConversationState(types.ConversationNewTaskThemeChoose)
 }
 
+// ConversationCreateTaskDoneTheme - обработчик разговора, завершения выбора тем задачи
 func (s *Service) ConversationCreateTaskDoneTheme(b *gotgbot.Bot, ctx *ext.Context) error {
 	callQuery := ctx.Update.CallbackQuery
 	if _, err := callQuery.Answer(b, &gotgbot.AnswerCallbackQueryOpts{Text: "Выбор завершен"}); err != nil {
@@ -242,18 +259,18 @@ func (s *Service) ConversationCreateTaskDoneTheme(b *gotgbot.Bot, ctx *ext.Conte
 	}
 	lastTask, err := s.Repository.GetLastTaskDraft(ctx.EffectiveSender.User.Id)
 	if err != nil {
-		return fmt.Errorf("поиск последней задачи: %w", err)
+		return fmt.Errorf("поиск последней новой задачи: %w", err)
 	}
-	messageId, ok := utils.TaskMessageExist(lastTask)
+	messageRegister, ok := utils.TaskMessageExist(lastTask, types.MessageRegisterOperationCreate)
 	if !ok {
 		return fmt.Errorf("сообщение задачи не найдено")
 	}
 	message := TaskMessageFill("Создание задачи", "Нажмите Создать", lastTask, lastTask.Themes)
 	if _, _, err = b.EditMessageText(message, &gotgbot.EditMessageTextOpts{
-		MessageId: messageId,
+		MessageId: messageRegister.BotMessageId,
 		ChatId:    ctx.EffectiveSender.ChatId,
 		ReplyMarkup: gotgbot.InlineKeyboardMarkup{
-			InlineKeyboard: utils.TaskButtons(),
+			InlineKeyboard: utils.TaskButtons(""),
 		},
 	}); err != nil {
 		return fmt.Errorf("изменение сообщения задачи, завершение создания: %w", err)
@@ -269,19 +286,19 @@ func (s *Service) ConversationCreateTaskDone(b *gotgbot.Bot, ctx *ext.Context) e
 	}
 	lastTask, err := s.Repository.GetLastTaskDraft(ctx.EffectiveSender.User.Id)
 	if err != nil {
-		return fmt.Errorf("поиск последней задачи: %w", err)
+		return fmt.Errorf("поиск последней новой задачи: %w", err)
 	}
 	lastTask.Status = types.TaskStatusCreated
 	if err = s.Repository.UpdateTask(lastTask); err != nil {
 		return fmt.Errorf("обновление статуса задачи: %w", err)
 	}
-	messageId, ok := utils.TaskMessageExist(lastTask)
+	messageRegister, ok := utils.TaskMessageExist(lastTask, types.MessageRegisterOperationCreate)
 	if !ok {
 		return fmt.Errorf("сообщение задачи не найдено")
 	}
 	message := TaskMessageFill("Задача создана", "", lastTask, lastTask.Themes)
 	if _, _, err = b.EditMessageText(message, &gotgbot.EditMessageTextOpts{
-		MessageId: messageId,
+		MessageId: messageRegister.BotMessageId,
 		ChatId:    ctx.EffectiveSender.ChatId,
 	}); err != nil {
 		return fmt.Errorf("изменение сообщения задачи, завершение создания: %w", err)
@@ -297,9 +314,9 @@ func (s *Service) ConversationCreateTaskCancel(b *gotgbot.Bot, ctx *ext.Context)
 	}
 	lastTask, err := s.Repository.GetLastTaskDraft(ctx.EffectiveSender.User.Id)
 	if err != nil {
-		return fmt.Errorf("поиск последней задачи: %w", err)
+		return fmt.Errorf("поиск последней новой задачи: %w", err)
 	}
-	messageId, ok := utils.TaskMessageExist(lastTask)
+	messageRegister, ok := utils.TaskMessageExist(lastTask, types.MessageRegisterOperationCreate)
 	if !ok {
 		return fmt.Errorf("сообщение задачи не найдено")
 	}
@@ -309,7 +326,7 @@ func (s *Service) ConversationCreateTaskCancel(b *gotgbot.Bot, ctx *ext.Context)
 	}
 	message := TaskMessageFill("Задача отменена", "", lastTask, lastTask.Themes)
 	if _, _, err = b.EditMessageText(message, &gotgbot.EditMessageTextOpts{
-		MessageId: messageId,
+		MessageId: messageRegister.BotMessageId,
 		ChatId:    ctx.EffectiveSender.ChatId,
 	}); err != nil {
 		return fmt.Errorf("изменение сообщения задачи, отмена создания: %w", err)
@@ -327,7 +344,7 @@ func (s *Service) ConversationCreateTaskChangePage(b *gotgbot.Bot, ctx *ext.Cont
 	if err != nil {
 		return fmt.Errorf("получение номера страницы клавиатуры тем: %w", err)
 	}
-	themeFilter := types.ThemeFilter{UserTGId: ctx.EffectiveSender.User.Id, SortQuery: types.SortQuery{Size: 2, Page: uint(page)}}
+	themeFilter := types.ThemeFilter{UserTGId: ctx.EffectiveSender.User.Id, SortQuery: types.SortQuery{Size: types.ThemeKeyboardSize, Page: uint(page)}}
 	allThemes, err := s.Repository.GetThemes(themeFilter)
 	if err != nil {
 		return fmt.Errorf("получения тем для клавиатуры: %w", err)
@@ -338,15 +355,15 @@ func (s *Service) ConversationCreateTaskChangePage(b *gotgbot.Bot, ctx *ext.Cont
 	}
 	lastTask, err := s.Repository.GetLastTaskDraft(ctx.EffectiveSender.User.Id)
 	if err != nil {
-		return fmt.Errorf("поиск последней задачи: %w", err)
+		return fmt.Errorf("поиск последней новой задачи: %w", err)
 	}
-	messageId, ok := utils.TaskMessageExist(lastTask)
+	messageRegister, ok := utils.TaskMessageExist(lastTask, types.MessageRegisterOperationCreate)
 	if !ok {
 		return fmt.Errorf("сообщение задачи не найдено")
 	}
-	message := TaskMessageFill("Создание задачи", fmt.Sprintf("Выберите темы.\nСтраница: (%d/%v)", themeFilter.Page, themesPagesCount), lastTask, lastTask.Themes)
+	message := TaskMessageFill("Создание задачи", fmt.Sprintf("Выберите темы.\nСтраница: (%d/%v)", themeFilter.Page, int(themesPagesCount)), lastTask, lastTask.Themes)
 	if _, _, err = callQuery.Message.EditText(b, message, &gotgbot.EditMessageTextOpts{
-		MessageId: messageId,
+		MessageId: messageRegister.BotMessageId,
 		ChatId:    ctx.EffectiveSender.ChatId,
 		ReplyMarkup: gotgbot.InlineKeyboardMarkup{
 			InlineKeyboard: s.CreateThemeInlineKeyboard(lastTask, allThemes, uint(page), themesPagesCount),
@@ -357,9 +374,90 @@ func (s *Service) ConversationCreateTaskChangePage(b *gotgbot.Bot, ctx *ext.Cont
 	return nil
 }
 
+func (s *Service) ConversationCreateTaskSkipField(b *gotgbot.Bot, ctx *ext.Context) error {
+	callQuery := ctx.Update.CallbackQuery
+	if _, err := callQuery.Answer(b, &gotgbot.AnswerCallbackQueryOpts{Text: "Поле пропущено"}); err != nil {
+		return fmt.Errorf("ответ на пропуск поля: %w", err)
+	}
+	nextField := strings.Replace(callQuery.Data, types.CallbackTaskFieldSkip, "", 1)
+	if nextField == "" {
+		return nil
+	}
+	lastTask, err := s.Repository.GetLastTaskDraft(ctx.EffectiveSender.User.Id)
+	if err != nil {
+		return fmt.Errorf("поиск последней новой задачи: %w", err)
+	}
+	messageRegister, ok := utils.TaskMessageExist(lastTask, types.MessageRegisterOperationCreate)
+	if !ok {
+		return fmt.Errorf("сообщение задачи не найдено")
+	}
+	switch nextField {
+	case types.ConversationNewTaskName:
+		message := TaskMessageFill("Создание задачи", "Введите имя задачи", lastTask, lastTask.Themes)
+		if _, _, err = b.EditMessageText(message, &gotgbot.EditMessageTextOpts{
+			MessageId: messageRegister.BotMessageId,
+			ChatId:    ctx.EffectiveSender.ChatId,
+			ReplyMarkup: gotgbot.InlineKeyboardMarkup{
+				InlineKeyboard: append(utils.PriorityButtons(), utils.TaskButtons(types.ConversationNewTaskPriority)...),
+			},
+		}); err != nil {
+			return fmt.Errorf("изменение сообщения задачи: %w", err)
+		}
+		return handlers.NextConversationState(types.ConversationNewTaskName)
+	case types.ConversationNewTaskPriority:
+		message := TaskMessageFill("Создание задачи", "Выберите приоритет", lastTask, lastTask.Themes)
+		if _, _, err = b.EditMessageText(message, &gotgbot.EditMessageTextOpts{
+			MessageId: messageRegister.BotMessageId,
+			ChatId:    ctx.EffectiveSender.ChatId,
+			ReplyMarkup: gotgbot.InlineKeyboardMarkup{
+				InlineKeyboard: append(utils.PriorityButtons(), utils.TaskButtons(types.ConversationNewTaskDeadline)...),
+			},
+		}); err != nil {
+			return fmt.Errorf("изменение сообщения задачи: %w", err)
+		}
+		return handlers.NextConversationState(types.ConversationNewTaskPriority)
+	case types.ConversationNewTaskDeadline:
+		message := TaskMessageFill("Создание задачи", fmt.Sprintf("Введите срок в формате %s", types.TimeLayout), lastTask, lastTask.Themes)
+		if _, _, err = b.EditMessageText(message, &gotgbot.EditMessageTextOpts{
+			MessageId: messageRegister.BotMessageId,
+			ChatId:    ctx.EffectiveSender.ChatId,
+			ReplyMarkup: gotgbot.InlineKeyboardMarkup{
+				InlineKeyboard: utils.TaskButtons(types.ConversationNewTaskThemeChoose),
+			},
+			//todo inline keyboard календарь + время
+		}); err != nil {
+			return fmt.Errorf("изменение сообщения задачи, приоритет задачи: %w", err)
+		}
+		return handlers.NextConversationState(types.ConversationNewTaskDeadline)
+	case types.ConversationNewTaskThemeChoose:
+		themeFilter := types.ThemeFilter{UserTGId: ctx.EffectiveSender.User.Id, SortQuery: types.SortQuery{Size: types.ThemeKeyboardSize, Page: 1}}
+		themes, err := s.Repository.GetThemes(themeFilter)
+		if err != nil {
+			return fmt.Errorf("получение тем для клавиатуры: %w", err)
+		}
+		themesPagesCount, err := s.Repository.GetThemePages(themeFilter)
+		if err != nil {
+			return fmt.Errorf("получение количества страниц тем: %w", err)
+		}
+		message := TaskMessageFill("Создание задачи", fmt.Sprintf("Выберите темы.\nСтраница: (%d/%v)", themeFilter.Page, themesPagesCount), lastTask, lastTask.Themes)
+		if _, _, err = b.EditMessageText(message, &gotgbot.EditMessageTextOpts{
+			MessageId: messageRegister.BotMessageId,
+			ChatId:    ctx.EffectiveSender.ChatId,
+			ReplyMarkup: gotgbot.InlineKeyboardMarkup{
+				InlineKeyboard: s.CreateThemeInlineKeyboard(lastTask, themes, 1, themesPagesCount),
+			},
+		}); err != nil {
+			return fmt.Errorf("изменение сообщения задачи, сроки задачи: %w", err)
+		}
+		return handlers.NextConversationState(types.ConversationNewTaskThemeChoose)
+	default:
+		return nil
+	}
+}
+
 // CommandGetTasks - обработчик команды получения задач
 func (s *Service) CommandGetTasks(b *gotgbot.Bot, ctx *ext.Context) error {
-	tasks, err := s.Repository.GetTasks(types.TaskFilter{UserTGId: ctx.EffectiveSender.User.Id})
+	tasks, err := s.Repository.GetTasks(types.TaskFilter{UserTGId: ctx.EffectiveSender.User.Id, SortQuery: types.SortQuery{Size: types.UnlimitedSize, Page: 1}})
 	if err != nil {
 		return fmt.Errorf("получение задач: %w", err)
 	}
@@ -432,5 +530,233 @@ func (s *Service) CreateThemeInlineKeyboard(lastTask types.TaskModel, themesByPa
 	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
 		{Text: "Завершить", CallbackData: types.CallbackThemeChoseDone},
 	})
-	return append(buttons, utils.TaskButtons()...)
+	return append(buttons, utils.TaskButtons("")...)
+}
+
+func (s *Service) ConversationEditTaskInit(b *gotgbot.Bot, ctx *ext.Context) error {
+	lastTask, err := s.Repository.GetLastTaskEditable(ctx.EffectiveSender.User.Id)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return fmt.Errorf("поиск последней редактируемой задачи: %w", err)
+	}
+	messageRegister, ok := utils.TaskMessageExist(lastTask, types.MessageRegisterOperationEdit)
+	if ok {
+		message := TaskMessageFill("Задача", "отмена прошлых действий", lastTask, lastTask.Themes)
+		if _, _, err = b.EditMessageText(message, &gotgbot.EditMessageTextOpts{
+			MessageId: messageRegister.BotMessageId,
+			ChatId:    ctx.EffectiveSender.ChatId,
+		}); err != nil {
+			return fmt.Errorf("изменение сообщения задачи: %w", err)
+		}
+	}
+	taskFilter := types.TaskFilter{UserTGId: ctx.EffectiveSender.User.Id, SortQuery: types.SortQuery{Size: types.ThemeKeyboardSize, Page: 1}}
+	tasks, err := s.Repository.GetTasks(taskFilter)
+	if err != nil {
+		return fmt.Errorf("получение задач для клавиатуры")
+	}
+	tasksPagesCount, err := s.Repository.GetTaskPages(taskFilter)
+	if err != nil {
+		return fmt.Errorf("получение количества страниц задач: %w", err)
+	}
+	message := fmt.Sprintf("Выберите задачу для редактирования.\n\nСтраница: (1/%d)", int(tasksPagesCount))
+	taskMessage, err := b.SendMessage(ctx.EffectiveSender.ChatId, message, &gotgbot.SendMessageOpts{
+		ReplyMarkup: gotgbot.InlineKeyboardMarkup{
+			InlineKeyboard: s.CreateThemePagesInlineKeyboard(tasks, 1, tasksPagesCount), //todo клавиатура задач
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("отправка сообщения редактирования задач: %w", err)
+	}
+	if err = s.Repository.WriteTaskMessage(types.MessageRegisterModel{TaskId: 0, BotMessageId: taskMessage.MessageId, Operation: types.MessageRegisterOperationEdit}); err != nil {
+		return fmt.Errorf("запись сообщения редактирования задачи: %w", err)
+	}
+	return handlers.NextConversationState(types.ConversationTaskEditChooseTask)
+}
+
+func (s *Service) ConversationEditTaskChooseTask(b *gotgbot.Bot, ctx *ext.Context) error {
+	callQuery := ctx.Update.CallbackQuery
+	if _, err := callQuery.Answer(b, &gotgbot.AnswerCallbackQueryOpts{Text: "Задача выбрана"}); err != nil {
+		return fmt.Errorf("ответ на выбор задачи: %w", err)
+	}
+	lastTask, err := s.Repository.GetLastTaskEditable(ctx.EffectiveSender.User.Id)
+	if err != nil {
+		return fmt.Errorf("поиск последней редактируемой задачи: %w", err)
+	}
+	messageRegister, ok := utils.TaskMessageExist(lastTask, types.MessageRegisterOperationEdit)
+	if !ok {
+		return fmt.Errorf("сообщение редактирования задачи не найдено")
+	}
+	taskStr := strings.Replace(callQuery.Data, types.CallbackTaskEditChooseTask, "", 1)
+	taskId, err := strconv.Atoi(taskStr)
+	if err != nil {
+		return fmt.Errorf("получение идентификатора задачи из клавиатуры: %w", err)
+	}
+	task, err := s.Repository.GetTaskById(ctx.EffectiveSender.User.Id, uint(taskId))
+	if err != nil {
+		return fmt.Errorf("выбранная задача не найдена: %w", err)
+	}
+	messageRegister := types.MessageRegisterModel{
+		BotMessageId: messageRegister.BotMessageId,
+		TaskId:       task.ID,
+		Operation:    types.MessageRegisterOperationEdit,
+	}
+	if err = s.Repository.UpdateTaskMessageByMessageIdAndTaskId(messageRegister); err != nil {
+		return fmt.Errorf("обновление регистра сообщений: %w", err)
+	}
+	message := TaskMessageFill("Редактирование задачи", "Введите новое название", task, task.Themes)
+	if _, _, err = b.EditMessageText(message, &gotgbot.EditMessageTextOpts{
+		MessageId: messageRegister.BotMessageId,
+		ChatId:    ctx.EffectiveSender.ChatId,
+	}); err != nil {
+		return fmt.Errorf("изменение сообщение редактирования задачи: %w", err)
+	}
+	return handlers.NextConversationState(types.ConversationTaskEditSetName)
+}
+
+func (s *Service) ConversationEditTaskChangeTasksPage(b *gotgbot.Bot, ctx *ext.Context) error {
+	callQuery := ctx.Update.CallbackQuery
+	if _, err := callQuery.Answer(b, &gotgbot.AnswerCallbackQueryOpts{Text: "Страница задач изменена"}); err != nil {
+		return fmt.Errorf("ответ на переключение страницы: %w", err)
+	}
+	lastTask, err := s.Repository.GetLastTaskEditable(ctx.EffectiveSender.User.Id)
+	if err != nil {
+		return fmt.Errorf("поиск последней редактируемой задачи: %w", err)
+	}
+	messageRegister, ok := utils.TaskMessageExist(lastTask, types.MessageRegisterOperationEdit)
+	if !ok {
+		return fmt.Errorf("сообщение редактирования задачи не найдено")
+	}
+	pageStr := strings.Replace(callQuery.Data, types.CallbackTaskEditChangeTasksPage, "", 1)
+	page, err := strconv.Atoi(pageStr)
+	if err != nil {
+		return fmt.Errorf("получение номера страницы клавиатуры задач: %w", err)
+	}
+	taskFilter := types.TaskFilter{UserTGId: ctx.EffectiveSender.User.Id, SortQuery: types.SortQuery{Size: types.ThemeKeyboardSize, Page: uint(page)}}
+	tasks, err := s.Repository.GetTasks(taskFilter)
+	if err != nil {
+		return fmt.Errorf("получение задач для клавиатуры: %w", err)
+	}
+	tasksPagesCount, err := s.Repository.GetTaskPages(taskFilter)
+	if err != nil {
+		return fmt.Errorf("получение количества страниц задач: %w", err)
+	}
+	message := fmt.Sprintf("Выберите задачу для редактирования.\n\nСтраница: (%d/%d)", page, int(tasksPagesCount))
+	if _, _, err = b.EditMessageText(message, &gotgbot.EditMessageTextOpts{
+		MessageId: messageRegister.BotMessageId,
+		ChatId:    ctx.EffectiveSender.ChatId,
+		ReplyMarkup: gotgbot.InlineKeyboardMarkup{
+			InlineKeyboard: s.CreateThemePagesInlineKeyboard(tasks, uint(page), tasksPagesCount), //todo клавиатура задач
+		},
+	}); err != nil {
+		return fmt.Errorf("изменение страницы клавиатуры задач: %w", err)
+	}
+	return nil
+}
+
+func (s *Service) ConversationEditTaskSetName(b *gotgbot.Bot, ctx *ext.Context) error {
+	lastTask, err := s.Repository.GetLastTaskEditable(ctx.EffectiveSender.User.Id)
+	if err != nil {
+		return fmt.Errorf("поиск последней редактируемой задачи: %w", err)
+	}
+	messageRegister, ok := utils.TaskMessageExist(lastTask, types.MessageRegisterOperationEdit)
+	if !ok || messageRegister.TaskId == 0 {
+		return fmt.Errorf("сообщение редактирования задачи не найдено")
+	}
+	lastTask.Name = ctx.EffectiveMessage.Text
+	if err = s.Repository.UpdateTask(lastTask); err != nil {
+		return fmt.Errorf("обновление имени задачи: %w", err)
+	}
+	message := TaskMessageFill("Редактирование задачи", "Выберите приоритет", lastTask, lastTask.Themes)
+	if _, _, err = b.EditMessageText(message, &gotgbot.EditMessageTextOpts{
+		MessageId: messageRegister.BotMessageId,
+		ChatId:    ctx.EffectiveSender.ChatId,
+		ReplyMarkup: gotgbot.InlineKeyboardMarkup{
+			InlineKeyboard: append(utils.PriorityButtons(), utils.TaskButtons(types.ConversationNewTaskDeadline)...),
+		},
+	}); err != nil {
+		return fmt.Errorf("изменение сообщения редактирования задачи: %w", err)
+	}
+	if _, err = b.DeleteMessage(ctx.EffectiveSender.ChatId, ctx.EffectiveMessage.MessageId, nil); err != nil {
+		return fmt.Errorf("удаления сообщения нового имени задачи: %w", err)
+	}
+	return handlers.NextConversationState(types.ConversationTaskEditSetPriority)
+}
+
+func (s *Service) ConversationEditTaskSetPriority(b *gotgbot.Bot, ctx *ext.Context) error {
+	callQuery := ctx.Update.CallbackQuery
+	if _, err := callQuery.Answer(b, &gotgbot.AnswerCallbackQueryOpts{Text: "Приоритет выбран"}); err != nil {
+		return fmt.Errorf("ответ на выбор приоритета: %w", err)
+	}
+	priority, ok := types.ParsePriority(callQuery.Data)
+	if !ok {
+		priority = types.TaskPriorityNone
+	}
+	lastTask, err := s.Repository.GetLastTaskEditable(ctx.EffectiveSender.User.Id)
+	if err != nil {
+		return fmt.Errorf("поиск последней редактируемой задачи: %w", err)
+	}
+	messageRegister, ok := utils.TaskMessageExist(lastTask, types.MessageRegisterOperationEdit)
+	if !ok || messageRegister.TaskId == 0 {
+		return fmt.Errorf("сообщение редактирования задачи не найдено")
+	}
+	lastTask.Priority = priority
+	if err = s.Repository.UpdateTask(lastTask); err != nil {
+		return fmt.Errorf("обновление приоритета задачи: %w", err)
+	}
+	message := TaskMessageFill("Редактирование задачи", fmt.Sprintf("Введите срок в формате %s", types.TimeLayout), lastTask, lastTask.Themes)
+	if _, _, err = b.EditMessageText(message, &gotgbot.EditMessageTextOpts{
+		MessageId: messageRegister.BotMessageId,
+		ChatId:    ctx.EffectiveSender.ChatId,
+		ReplyMarkup: gotgbot.InlineKeyboardMarkup{
+			InlineKeyboard: utils.TaskButtons(types.ConversationNewTaskThemeChoose),
+		},
+		//todo inline keyboard календарь + время
+	}); err != nil {
+		return fmt.Errorf("изменение сообщения редактирования задачи: %w", err)
+	}
+	return handlers.NextConversationState(types.ConversationTaskEditSetDeadline)
+}
+
+func (s *Service) ConversationEditTaskSetDeadline(b *gotgbot.Bot, ctx *ext.Context) error {
+	deadline, err := time.Parse(types.TimeLayout, ctx.EffectiveMessage.Text)
+	if err != nil {
+		if _, err = ctx.EffectiveMessage.Reply(b, fmt.Sprintf("обработка сроков задачи, используйте формат %s", types.TimeLayout), nil); err != nil {
+			return fmt.Errorf("ответ про правильный формат сроков: %w", err)
+		}
+		return handlers.NextConversationState(types.ConversationTaskEditSetDeadline)
+	}
+	lastTask, err := s.Repository.GetLastTaskEditable(ctx.EffectiveSender.User.Id)
+	if err != nil {
+		return fmt.Errorf("поиск последней редактируемой задачи: %w", err)
+	}
+	messageRegister, ok := utils.TaskMessageExist(lastTask, types.MessageRegisterOperationEdit)
+	if !ok || messageRegister.TaskId == 0 {
+		return fmt.Errorf("сообщение редактирования задачи не найдено")
+	}
+	lastTask.Deadline = deadline
+	if err = s.Repository.UpdateTask(lastTask); err != nil {
+		return fmt.Errorf("обновление сроков задачи: %w", err)
+	}
+	themeFilter := types.ThemeFilter{UserTGId: ctx.EffectiveSender.User.Id, SortQuery: types.SortQuery{Size: types.ThemeKeyboardSize, Page: 1}}
+	themes, err := s.Repository.GetThemes(themeFilter)
+	if err != nil {
+		return fmt.Errorf("получение тем для клавиатуры: %w", err)
+	}
+	themesPagesCount, err := s.Repository.GetThemePages(themeFilter)
+	if err != nil {
+		return fmt.Errorf("получение количества страниц тем: %w", err)
+	}
+	message := TaskMessageFill("Редактирование задачи", fmt.Sprintf("Выберите темы.\nСтраница: (%d/%v)", themeFilter.Page, themesPagesCount), lastTask, lastTask.Themes)
+	if _, _, err = b.EditMessageText(message, &gotgbot.EditMessageTextOpts{
+		MessageId: messageRegister.BotMessageId,
+		ChatId:    ctx.EffectiveSender.ChatId,
+		ReplyMarkup: gotgbot.InlineKeyboardMarkup{
+			InlineKeyboard: s.CreateThemeInlineKeyboard(lastTask, themes, 1, themesPagesCount),
+		},
+	}); err != nil {
+		return fmt.Errorf("изменение сообщения редактирования задачи: %w", err)
+	}
+	if _, err = b.DeleteMessage(ctx.EffectiveSender.ChatId, ctx.EffectiveMessage.MessageId, nil); err != nil {
+		return fmt.Errorf("удаление сообщения новых сроков задачи")
+	}
+	return handlers.NextConversationState(types.ConversationTaskEditSetTheme)
 }
