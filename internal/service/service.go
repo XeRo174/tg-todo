@@ -102,21 +102,21 @@ func (s *Service) Start() {
 	))
 
 	dispatcher.AddHandler(handlers.NewConversation(
-		[]ext.Handler{handlers.NewCommand("create_task", s.ConversationCreateTaskInit)},
+		[]ext.Handler{handlers.NewCommand(types.CommandTaskCreateInit, s.ConversationCreateTaskInit)},
 		map[string][]ext.Handler{
-			types.ConversationNewTaskName: {
+			types.ConversationTaskCreateSetName: {
 				handlers.NewMessage(noCommand, s.ConversationCreateTaskSetName),
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.ConversationCreateTaskSkipField),
 			},
-			types.ConversationNewTaskPriority: {
+			types.ConversationTaskCreateSetPriority: {
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskPrioritySet), s.ConversationCreateTaskSetPriority),
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.ConversationCreateTaskSkipField),
 			},
-			types.ConversationNewTaskDeadline: {
+			types.ConversationTaskCreateSetDeadline: {
 				handlers.NewMessage(noCommand, s.ConversationCreateTaskSetDeadline),
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.ConversationCreateTaskSkipField),
 			},
-			types.ConversationNewTaskThemeChoose: {
+			types.ConversationTaskCreateSetTheme: {
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskThemeChoose), s.ConversationCreateTaskSetTheme),
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackChangeTaskThemesPage), s.ConversationCreateTaskChangePage),
 				handlers.NewCallback(callbackquery.Equal(types.CallbackThemeChoseDone), s.ConversationCreateTaskDoneTheme),
@@ -131,6 +131,34 @@ func (s *Service) Start() {
 			},
 			AllowReEntry: true,
 			StateStorage: conversation.NewInMemoryStorage(conversation.KeyStrategySenderAndChat),
+		}))
+
+	dispatcher.AddHandler(handlers.NewConversation(
+		[]ext.Handler{handlers.NewCommand(types.CommandTaskEditInit, s.ConversationEditTaskInit)},
+		map[string][]ext.Handler{
+			types.ConversationTaskEditChooseTask: {
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskChoose), s.ConversationEditTaskChooseTask),
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackChangePage), s.CallbackTaskChangeTasksPage),
+			},
+			types.ConversationTaskEditSetName: {
+				handlers.NewMessage(noCommand, s.ConversationEditTaskSetName),
+			},
+			types.ConversationTaskEditSetPriority: {
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskPrioritySet), s.ConversationEditTaskSetName),
+			},
+			types.ConversationTaskEditSetDeadline: {
+				handlers.NewMessage(noCommand, s.ConversationEditTaskSetDeadline),
+			},
+			types.ConversationTaskEditSetTheme: {
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskThemeChoose), s.ConversationEditTaskSetTheme),
+			},
+		},
+		&handlers.ConversationOpts{
+			Exits: []ext.Handler{
+				cancelCommand,
+				handlers.NewCallback(callbackquery.Equal(types.CallbackTaskDone), s.CallbackTaskDone),
+				handlers.NewCallback(callbackquery.Equal(types.CallbackTaskCancel), s.CallbackTaskCancel),
+			},
 		}))
 
 	err := updater.StartPolling(s.Bot, &ext.PollingOpts{
@@ -220,4 +248,28 @@ func (s *Service) CommandCommonValue(b *gotgbot.Bot, ctx *ext.Context) error {
 
 func noCommand(msg *gotgbot.Message) bool {
 	return message.Text(msg) && !message.Command(msg)
+}
+
+func MessageOperationBeauty(messageRegister types.MessageRegisterModel) string {
+	var title string
+	switch messageRegister.Operation {
+	case types.MessageRegisterOperationTaskCreate:
+		title = "Создание задачи прервано"
+	case types.MessageRegisterOperationTaskEdit:
+		title = "Редактирование задачи прервано"
+	case types.MessageRegisterOperationThemeCreate:
+		title = "Создание темы прервано"
+	case types.MessageRegisterOperationThemeEdit:
+		title = "Редактирование темы прервано"
+	default:
+		title = "Работа прервана"
+	}
+	if messageRegister.TaskId != 0 {
+		return TaskMessageFill(title, "", messageRegister.Task, messageRegister.Task.Themes)
+	} else if messageRegister.ThemeId != 0 {
+		return ThemeMessageFill(title, "", messageRegister.Theme)
+	} else {
+		return title
+	}
+
 }

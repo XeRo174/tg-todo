@@ -24,16 +24,24 @@ const (
 	ConversationTaskEditSetTheme     = "conversation_task_edit_set_theme"
 	ConversationTaskEditSetThemeDone = "conversation_task_edit_set_theme_done"
 
-	ConversationNewTaskName        = "conversation_new_task_name"
-	ConversationNewTaskPriority    = "conversation_new_task_priority"
-	ConversationNewTaskDeadline    = "conversation_new_task_deadline"
-	ConversationNewTaskThemeChoose = "conversation_new_task_theme_choose"
+	//ConversationNewTaskName        = "conversation_new_task_name"
+	//ConversationNewTaskPriority    = "conversation_new_task_priority"
+	//ConversationNewTaskDeadline    = "conversation_new_task_deadline"
+	//ConversationNewTaskThemeChoose = "conversation_new_task_theme_choose"
 )
 
 // Список констант определяющих ключи callback
 const (
 	CallbackThemeEditChooseTheme      = "theme_edit_choose_theme:"
 	CallbackThemeEditChangeThemesPage = "theme_edit_change_themes_page:"
+
+	CallbackThemeChoose = "theme_choose:"
+
+	CallbackTaskChoose    = "task_choose:"
+	CallbackTaskFieldSkip = "task_field_skip:"
+	CallbackTaskComplete  = "task_complete:"
+	CallbackTaskDone      = "task_done:"
+	CallbackTaskCancel    = "task_cancel:"
 
 	CallbackTaskPrioritySet      = "set_task_priority:"
 	CallbackTaskStatusSet        = "set_task_status:"
@@ -42,8 +50,9 @@ const (
 	CallbackCurrentPage          = "current_page:"
 	CallbackThemeChoseDone       = "chose_theme_done"
 	CallbackTaskCreateDone       = "create_task_done"
-	CallbackTaskCreateCancel     = "create_task_cancel"
-	CallbackTaskFieldSkip        = "edit_task_field_skip:"
+	CallbackTaskCreateCancel     = "create_task_cancel:"
+
+	CallbackChangePage = "change_page:"
 )
 
 // Список констант определяющих команды
@@ -51,6 +60,7 @@ const (
 	CommandThemeCreateInit = "create_theme"
 	CommandThemeEditInit   = "edit_theme"
 	CommandTaskCreateInit  = "create_task"
+	CommandTaskEditInit    = "edit_task"
 )
 
 const (
@@ -60,4 +70,14 @@ const (
 
 	MessageRegisterOperationCreate = "create"
 	MessageRegisterOperationEdit   = "edit"
+
+	MessageRegisterOperationTaskCreate = "create_task"
+	MessageRegisterOperationTaskEdit   = "edit_task"
+
+	MessageRegisterOperationThemeCreate = "create_theme"
+	MessageRegisterOperationThemeEdit   = "edit_theme"
+)
+
+const (
+	ErrorStrokeFindUserByTG = "поиск пользователя по tg"
 )

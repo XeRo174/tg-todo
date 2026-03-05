@@ -27,33 +27,6 @@ func (r *Repository) GetTaskPages(filter types.TaskFilter) (float64, error) {
 	return math.Ceil(float64(count) / float64(filter.Size)), err
 }
 
-// GetLastTaskDraft - получить последнюю созданную задачу черновик
-func (r *Repository) GetLastTaskDraft(userTGId int64) (types.TaskModel, error) {
-	var task types.TaskModel
-	query := r.Database.Model(&types.TaskModel{})
-	query = handleTaskPreload(query)
-	query = query.
-		Where("user_models.tg_id = ?", userTGId).
-		Where("task_models.status=?", types.TaskStatusDraft).
-		Where("task_message_register_models.operation=?", types.MessageRegisterOperationCreate)
-	query = query.Order("task_models.updated_at desc")
-	err := query.Last(&task).Error
-	return task, err
-}
-
-// GetLastTaskEditable - получить последнюю редактируемую задачу
-func (r *Repository) GetLastTaskEditable(userTGId int64) (types.TaskModel, error) {
-	var task types.TaskModel
-	query := r.Database.Model(&types.TaskModel{})
-	query = handleTaskPreload(query)
-	query = query.
-		Where("user_models.tg_id = ?", userTGId).
-		Where("task_message_register_models.operation=?", types.MessageRegisterOperationEdit)
-	query = query.Order("task_models.updated_at desc")
-	err := query.Last(&task).Error
-	return task, err
-}
-
 func (r *Repository) GetTaskById(userTGId int64, taskId uint) (types.TaskModel, error) {
 	var task types.TaskModel
 	query := r.Database.Model(&types.TaskModel{})
@@ -85,26 +58,13 @@ func (r *Repository) DeleteTask(id uint) error {
 	return r.Database.Delete(&types.TaskModel{}, id).Error
 }
 
-func (r *Repository) WriteTaskMessage(taskMessage types.MessageRegisterModel) error {
-	return r.Database.Create(&taskMessage).Error
-}
-
-// todo условия обновления? message id полностью уникальное? можно ли использовать только его для поиска
-func (r *Repository) UpdateTaskMessageByMessageIdAndTaskId(taskMessage types.MessageRegisterModel) error {
-	return r.Database.Model(types.MessageRegisterModel{}).
-		Joins("left join task_models on task_models.tg_id = task_message_register_models.task_id").
-		Where("id=?", taskMessage.ID).
-		Where("task_message_register_models.bot_message_id=?", taskMessage.BotMessageId).
-		Updates(taskMessage).Error
-}
-
 // handleTaskPreload - сформировать запрос подключения внешних таблиц к таблице задач и предварительно загрузить данные
 func handleTaskPreload(query *gorm.DB) *gorm.DB {
 	query = query.
 		Joins("left join user_models on user_models.id = task_models.user_id").
 		Joins("left join task_themes on task_themes.theme_model_id = task_models.id").
 		Joins("left join theme_models on theme_models.id = task_themes.theme_model_id").
-		Joins("left join task_message_register_models on task_message_register_models.task_id=task_models.id")
+		Joins("left join message_register_models on message_register_models.task_id=task_models.id")
 
 	query = query.
 		Preload("Themes").
@@ -147,3 +107,47 @@ func handleTaskFilters(queryOld *gorm.DB, filter types.TaskFilter) *gorm.DB {
 	}
 	return queryNew
 }
+
+//todo отказаться придется от разных функций получения последних задач и перейти на условие и статус задачи, при удалении также потребуется добавить новый тип операции types.MessageRegisterOperationDelete,
+// там еще и статусы надо менять. Блять
+//// GetLastTaskDraft - получить последнюю созданную задачу черновик
+//func (r *Repository) GetLastTaskDraft(userTGId int64) (types.TaskModel, error) {
+//	var task types.TaskModel
+//	query := r.Database.Model(&types.TaskModel{})
+//	query = handleTaskPreload(query)
+//	query = query.
+//		Where("user_models.tg_id = ?", userTGId).
+//		Where("task_models.status=?", types.TaskStatusDraft).
+//		Where("message_register_models.operation=?", types.MessageRegisterOperationCreate)
+//	query = query.Order("task_models.updated_at desc")
+//	err := query.Last(&task).Error
+//	return task, err
+//}
+//
+//// GetLastTaskEditable - получить последнюю редактируемую задачу
+//func (r *Repository) GetLastTaskEditable(userTGId int64) (types.TaskModel, error) {
+//	var task types.TaskModel
+//	query := r.Database.Model(&types.TaskModel{})
+//	query = handleTaskPreload(query)
+//	query = query.
+//		Where("user_models.tg_id = ?", userTGId).
+//		Where("message_register_models.operation=?", types.MessageRegisterOperationEdit)
+//	query = query.Order("task_models.updated_at desc")
+//	err := query.Last(&task).Error
+//	return task, err
+//}
+//
+//func (r *Repository) GetLastTaskByOperation(userTGId int64, operation string) (types.TaskModel, error) {
+//	var task types.TaskModel
+//	query := r.Database.Model(&types.TaskModel{})
+//	query = handleTaskPreload(query)
+//	query = query.
+//		Where("user_models.tg_id = ?", userTGId).
+//		Where("message_register_models.operation=?", operation)
+//	query = query.Order("task_models.updated_at desc")
+//	err := query.Last(&task).Error
+//	return task, err
+//}
+//func (r *Repository) WriteTaskMessage(taskMessage types.MessageRegisterModel) error {
+//	return r.Database.Create(&taskMessage).Error
+//}
