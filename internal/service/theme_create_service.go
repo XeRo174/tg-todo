@@ -76,7 +76,7 @@ func (s *Service) ConversationCreateThemeSetName(b *gotgbot.Bot, ctx *ext.Contex
 	if _, err = b.DeleteMessage(ctx.EffectiveSender.ChatId, ctx.EffectiveMessage.MessageId, nil); err != nil {
 		return fmt.Errorf("удаление сообщения имени темы")
 	}
-	if err = s.Repository.DeleteMessageRegisterByUserTGId(userTGId); err != nil {
+	if err = s.Repository.DeleteMessageRegisterByUserId(user.ID); err != nil {
 		return fmt.Errorf("очистка сообщения создания темы: %w", err)
 	}
 	return handlers.EndConversation()

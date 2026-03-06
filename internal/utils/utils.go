@@ -8,6 +8,7 @@ import (
 	"unicode"
 )
 
+// FirstTitleLetter - преобразует первый символ строки к верхнему регистру, а последующие к нижнему
 func FirstTitleLetter(stroke string) string {
 	if stroke == "" {
 		return ""
@@ -19,6 +20,38 @@ func FirstTitleLetter(stroke string) string {
 	}
 	return string(r)
 }
+
+// ThemeStroke - формирует из массива тем строку названий тем
+func ThemeStroke(themes []types.ThemeModel) string {
+	var strokes []string
+	for _, theme := range themes {
+		strokes = append(strokes, fmt.Sprintf("%s", theme.Name))
+	}
+	return strings.Join(strokes, ", ")
+}
+
+// Contains - проверяет есть ли тема с указанным id в массиве тем
+func Contains(themes []types.ThemeModel, themeId uint) bool {
+	for _, theme := range themes {
+		if theme.ID == themeId {
+			return true
+		}
+	}
+	return false
+}
+
+// TaskInlineKeyboard - формирует клавиатуру работы с задачей
+func TaskInlineKeyboard(nextField string) [][]gotgbot.InlineKeyboardButton {
+	var buttons [][]gotgbot.InlineKeyboardButton
+	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
+		{Text: "Завершить", CallbackData: types.CallbackTaskComplete},
+		{Text: "Пропуск поля", CallbackData: fmt.Sprintf("%s%s", types.CallbackTaskFieldSkip, nextField)},
+		{Text: "Прекратить", CallbackData: types.CallbackTaskStop},
+	})
+	return buttons
+}
+
+// PriorityButtons - формирует клавиатуру возможных приоритетов задачи
 func PriorityButtons() [][]gotgbot.InlineKeyboardButton {
 	var buttons [][]gotgbot.InlineKeyboardButton
 	for _, priority := range types.AllPriorities() {
@@ -29,43 +62,60 @@ func PriorityButtons() [][]gotgbot.InlineKeyboardButton {
 	return buttons
 }
 
-func TaskButtons(nextField string) [][]gotgbot.InlineKeyboardButton {
+// ChooseThemeInlineKeyboard - формирует клавиатуру выбора тем
+func ChooseThemeInlineKeyboard(themesByPage []types.ThemeModel, totalPages, currentPage int) [][]gotgbot.InlineKeyboardButton {
 	var buttons [][]gotgbot.InlineKeyboardButton
-	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
-		{Text: "Создать", CallbackData: types.CallbackTaskCreateDone},                                        // Создать задачу
-		{Text: "Пропустить поле", CallbackData: fmt.Sprintf("%s%s", types.CallbackTaskFieldSkip, nextField)}, //Пропустить поле
-		{Text: "Отменить", CallbackData: types.CallbackTaskCreateCancel},                                     //Бросить создание
-	})
+	for _, theme := range themesByPage {
+		buttons = append(buttons, []gotgbot.InlineKeyboardButton{
+			{Text: theme.Name, CallbackData: fmt.Sprintf("%s%d", types.CallbackThemeChoose, theme.ID)},
+		})
+	}
+	if totalPages > 1 {
+		buttons = append(buttons, CreateArrowButtons(currentPage, totalPages)...)
+	}
 	return buttons
 }
 
-func ThemeStroke(themes []types.ThemeModel) string {
-	var strokes []string
-	for _, theme := range themes {
-		strokes = append(strokes, fmt.Sprintf("%s", theme.Name))
+// ChooseTaskInlineKeyboard - формирует клавиатуру выбора задач
+func ChooseTaskInlineKeyboard(tasksByPage []types.TaskModel, totalPages, currentPage int) [][]gotgbot.InlineKeyboardButton {
+	var buttons [][]gotgbot.InlineKeyboardButton
+	for _, task := range tasksByPage {
+		buttons = append(buttons, []gotgbot.InlineKeyboardButton{
+			{Text: task.Name, CallbackData: fmt.Sprintf("%s%d", types.CallbackTaskChoose, task.ID)},
+		})
 	}
-	return strings.Join(strokes, ", ")
+	if totalPages > 1 {
+		buttons = append(buttons, CreateArrowButtons(currentPage, totalPages)...)
+	}
+	return buttons
 }
 
-func GetLastMessageRegister(task types.TaskModel, operation string) (types.MessageRegisterModel, bool) {
-	for i := len(task.Messages) - 1; i >= 0; i-- {
-		if task.Messages[i].Operation == operation {
-			return task.Messages[i], true
+// ChooseThemeForTaskInlineKeyboard - формирует клавиатуру выбора тем задачи
+func ChooseThemeForTaskInlineKeyboard(task types.TaskModel, themesByPage []types.ThemeModel, totalPages, currentPage int) [][]gotgbot.InlineKeyboardButton {
+	var buttons [][]gotgbot.InlineKeyboardButton
+	for _, theme := range themesByPage {
+		if Contains(task.Themes, theme.ID) {
+			buttonText := fmt.Sprintf("[x] %s", theme.Name)
+			buttons = append(buttons, []gotgbot.InlineKeyboardButton{
+				{Text: buttonText, CallbackData: fmt.Sprintf("%s%d;%s%d", types.CallbackTaskUnsetTheme, theme.ID, types.CallbackCurrentPage, currentPage)},
+			})
+		} else {
+			buttonText := fmt.Sprintf("[  ] %s", theme.Name)
+			buttons = append(buttons, []gotgbot.InlineKeyboardButton{
+				{Text: buttonText, CallbackData: fmt.Sprintf("%s%d;%s%d", types.CallbackTaskSetTheme, theme.ID, types.CallbackCurrentPage, currentPage)},
+			})
 		}
 	}
-	return types.MessageRegisterModel{}, false
-}
-
-// Contains Вспомогательная функция для проверки наличия элемента в слайсе
-func Contains(slice []types.ThemeModel, item string) bool {
-	for _, s := range slice {
-		if s.Name == item {
-			return true
-		}
+	if totalPages > 1 {
+		buttons = append(buttons, CreateArrowButtons(currentPage, totalPages)...)
+		buttons = append(buttons, []gotgbot.InlineKeyboardButton{
+			{Text: "Завершить выбор", CallbackData: types.CallbackTaskSetThemeDone}},
+		)
 	}
-	return false
+	return buttons
 }
 
+// CreateArrowButtons - формирует клавиатуру из стрелок переключения страниц
 func CreateArrowButtons(currentPage, totalPages int) [][]gotgbot.InlineKeyboardButton {
 	var buttons [][]gotgbot.InlineKeyboardButton
 	if currentPage == 1 {
@@ -88,4 +138,9 @@ func CreateArrowButtons(currentPage, totalPages int) [][]gotgbot.InlineKeyboardB
 		})
 	}
 	return buttons
+}
+
+// CreateCalendarButtons - создание клавиатуры для сроков задач
+func CreateCalendarButtons() [][]gotgbot.InlineKeyboardButton {
+	return nil
 }

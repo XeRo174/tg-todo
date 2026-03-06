@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
@@ -15,25 +16,17 @@ import (
 	"time"
 )
 
-// ThemeSession - структура для хранения сессии редактирования или создания темы
-type ThemeSession struct {
-	ThemeId   uint
-	MessageId int64
-}
-
 type Service struct {
-	Repository        *repository.Repository
-	Bot               *gotgbot.Bot
-	App               bootstrap.Application
-	ThemeEditSessions map[int64]ThemeSession
+	Repository *repository.Repository
+	Bot        *gotgbot.Bot
+	App        bootstrap.Application
 }
 
 func NewService(r *repository.Repository, bot *gotgbot.Bot, app bootstrap.Application) *Service {
 	return &Service{
-		Repository:        r,
-		Bot:               bot,
-		App:               app,
-		ThemeEditSessions: make(map[int64]ThemeSession),
+		Repository: r,
+		Bot:        bot,
+		App:        app,
 	}
 }
 
@@ -59,6 +52,10 @@ func NewService(r *repository.Repository, bot *gotgbot.Bot, app bootstrap.Applic
 func (s *Service) Start() {
 	dispatcher := ext.NewDispatcher(&ext.DispatcherOpts{
 		Error: func(b *gotgbot.Bot, ctx *ext.Context, err error) ext.DispatcherAction {
+			var convErr *handlers.ConversationStateChange
+			if errors.As(err, &convErr) && convErr.End {
+				return ext.DispatcherActionNoop
+			}
 			//todo отправка сообщения пользователю
 			logrus.Errorf("Ошибка во время обработки сообщения: %+v", err)
 			return ext.DispatcherActionNoop
@@ -89,8 +86,8 @@ func (s *Service) Start() {
 		[]ext.Handler{handlers.NewCommand(types.CommandThemeEditInit, s.ConversationEditThemeInit)},
 		map[string][]ext.Handler{
 			types.ConversationThemeEditChooseTheme: {
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackThemeEditChooseTheme), s.ConversationEditThemeChoseTheme),
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackThemeEditChangeThemesPage), s.ConversationEditThemeChangeThemesPage),
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackThemeChoose), s.ConversationEditThemeChoseTheme),
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackChangePage), s.ConversationEditThemeChangeThemesPage),
 			},
 			types.ConversationThemeEditSetName: {handlers.NewMessage(noCommand, s.ConversationEditThemeSetName)},
 		},
@@ -100,39 +97,40 @@ func (s *Service) Start() {
 			StateStorage: conversation.NewInMemoryStorage(conversation.KeyStrategySenderAndChat),
 		},
 	))
-
+	//Разговор создания новой задачи
 	dispatcher.AddHandler(handlers.NewConversation(
 		[]ext.Handler{handlers.NewCommand(types.CommandTaskCreateInit, s.ConversationCreateTaskInit)},
 		map[string][]ext.Handler{
 			types.ConversationTaskCreateSetName: {
 				handlers.NewMessage(noCommand, s.ConversationCreateTaskSetName),
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.ConversationCreateTaskSkipField),
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.ConversationCreateTaskSkipField), //skip field old
 			},
 			types.ConversationTaskCreateSetPriority: {
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskPrioritySet), s.ConversationCreateTaskSetPriority),
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.ConversationCreateTaskSkipField),
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.ConversationCreateTaskSkipField), //skip field old
 			},
 			types.ConversationTaskCreateSetDeadline: {
 				handlers.NewMessage(noCommand, s.ConversationCreateTaskSetDeadline),
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.ConversationCreateTaskSkipField),
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.ConversationCreateTaskSkipField), //skip field old
 			},
 			types.ConversationTaskCreateSetTheme: {
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskThemeChoose), s.ConversationCreateTaskSetTheme),
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackChangeTaskThemesPage), s.ConversationCreateTaskChangePage),
-				handlers.NewCallback(callbackquery.Equal(types.CallbackThemeChoseDone), s.ConversationCreateTaskDoneTheme),
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.ConversationCreateTaskSkipField),
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskSetTheme), s.ConversationCreateTaskSetTheme),
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskUnsetTheme), s.ConversationCreateTaskUnsetTheme),
+				handlers.NewCallback(callbackquery.Equal(types.CallbackTaskSetThemeDone), s.CallbackTaskDoneTheme),
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackChangePage), s.CallbackTaskChangeThemesPage),
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.ConversationCreateTaskSkipField), //skip field old
 			},
 		},
 		&handlers.ConversationOpts{
 			Exits: []ext.Handler{
 				cancelCommand,
-				handlers.NewCallback(callbackquery.Equal(types.CallbackTaskCreateDone), s.ConversationCreateTaskDone),
-				handlers.NewCallback(callbackquery.Equal(types.CallbackTaskCreateCancel), s.ConversationCreateTaskCancel),
+				handlers.NewCallback(callbackquery.Equal(types.CallbackTaskComplete), s.CallbackTaskDone),
+				handlers.NewCallback(callbackquery.Equal(types.CallbackTaskStop), s.CallbackTaskCancel),
 			},
 			AllowReEntry: true,
 			StateStorage: conversation.NewInMemoryStorage(conversation.KeyStrategySenderAndChat),
 		}))
-
+	//Разговор редактирования задачи
 	dispatcher.AddHandler(handlers.NewConversation(
 		[]ext.Handler{handlers.NewCommand(types.CommandTaskEditInit, s.ConversationEditTaskInit)},
 		map[string][]ext.Handler{
@@ -144,21 +142,26 @@ func (s *Service) Start() {
 				handlers.NewMessage(noCommand, s.ConversationEditTaskSetName),
 			},
 			types.ConversationTaskEditSetPriority: {
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskPrioritySet), s.ConversationEditTaskSetName),
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskPrioritySet), s.ConversationEditTaskSetPriority),
 			},
 			types.ConversationTaskEditSetDeadline: {
 				handlers.NewMessage(noCommand, s.ConversationEditTaskSetDeadline),
 			},
 			types.ConversationTaskEditSetTheme: {
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskThemeChoose), s.ConversationEditTaskSetTheme),
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskSetTheme), s.ConversationEditTaskSetTheme),
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskUnsetTheme), s.ConversationEditTaskUnsetTheme),
+				handlers.NewCallback(callbackquery.Equal(types.CallbackTaskSetThemeDone), s.CallbackTaskDoneTheme),
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackChangePage), s.CallbackTaskChangeThemesPage),
 			},
 		},
 		&handlers.ConversationOpts{
 			Exits: []ext.Handler{
 				cancelCommand,
-				handlers.NewCallback(callbackquery.Equal(types.CallbackTaskDone), s.CallbackTaskDone),
-				handlers.NewCallback(callbackquery.Equal(types.CallbackTaskCancel), s.CallbackTaskCancel),
+				handlers.NewCallback(callbackquery.Equal(types.CallbackTaskComplete), s.CallbackTaskDone),
+				handlers.NewCallback(callbackquery.Equal(types.CallbackTaskStop), s.CallbackTaskCancel), //new
 			},
+			AllowReEntry: true,
+			StateStorage: conversation.NewInMemoryStorage(conversation.KeyStrategySenderAndChat),
 		}))
 
 	err := updater.StartPolling(s.Bot, &ext.PollingOpts{

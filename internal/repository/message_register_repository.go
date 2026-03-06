@@ -22,15 +22,13 @@ func (r *Repository) GetMessageRegisterByUserTGId(userTGId int64) (types.Message
 	return msg, err
 }
 
-func (r *Repository) DeleteMessageRegisterByUserTGId(userTGId int64) error {
-	query := r.Database.Model(&types.MessageRegisterModel{})
-	query = HandleMessageRegisterPreload(query)
-	return query.Where("user_models.tg_id=?", userTGId).Delete(&types.MessageRegisterModel{}).Error
+func (r *Repository) DeleteMessageRegisterByUserId(userId uint) error {
+	return r.Database.Unscoped().Model(&types.MessageRegisterModel{}).Where("message_register_models.user_id=?", userId).Delete(&types.MessageRegisterModel{}).Error
 }
 
 func HandleMessageRegisterPreload(queryOld *gorm.DB) *gorm.DB {
 	queryNew := queryOld
-	queryNew = queryNew.Joins("left join user_models on user_models.id = message_register_models.id")
+	queryNew = queryNew.Joins("left join user_models on user_models.id = message_register_models.user_id")
 	queryNew = queryNew.
 		Preload("User").
 		Preload("Task").

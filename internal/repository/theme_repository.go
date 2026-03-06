@@ -70,6 +70,7 @@ func handleThemePreload(query *gorm.DB) *gorm.DB {
 	query = query.
 		Joins("left join user_models on user_models.id = theme_models.user_id")
 	query = query.Preload("Tasks")
+	query = query.Group("theme_models.id")
 	return query
 }
 

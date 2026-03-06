@@ -23,35 +23,37 @@ const (
 	ConversationTaskEditSetDeadline  = "conversation_task_edit_set_deadline"
 	ConversationTaskEditSetTheme     = "conversation_task_edit_set_theme"
 	ConversationTaskEditSetThemeDone = "conversation_task_edit_set_theme_done"
-
-	//ConversationNewTaskName        = "conversation_new_task_name"
-	//ConversationNewTaskPriority    = "conversation_new_task_priority"
-	//ConversationNewTaskDeadline    = "conversation_new_task_deadline"
-	//ConversationNewTaskThemeChoose = "conversation_new_task_theme_choose"
 )
 
 // Список констант определяющих ключи callback
 const (
-	CallbackThemeEditChooseTheme      = "theme_edit_choose_theme:"
-	CallbackThemeEditChangeThemesPage = "theme_edit_change_themes_page:"
-
+	// CallbackThemeChoose - выбор темы для редактирования (новый)
 	CallbackThemeChoose = "theme_choose:"
 
-	CallbackTaskChoose    = "task_choose:"
+	// CallbackTaskChoose - выбор задачи для редактирования
+	CallbackTaskChoose = "task_choose:"
+	// CallbackTaskFieldSkip - пропуск поля задачи
 	CallbackTaskFieldSkip = "task_field_skip:"
-	CallbackTaskComplete  = "task_complete:"
-	CallbackTaskDone      = "task_done:"
-	CallbackTaskCancel    = "task_cancel:"
+	// CallbackTaskComplete - завершение работы с задачей
+	CallbackTaskComplete = "task_complete"
+	// CallbackTaskStop - прекращение работы с задачей
+	CallbackTaskStop = "task_stop"
 
-	CallbackTaskPrioritySet      = "set_task_priority:"
-	CallbackTaskStatusSet        = "set_task_status:"
-	CallbackTaskThemeChoose      = "set_task_theme:"
-	CallbackChangeTaskThemesPage = "change_page_task_themes:"
-	CallbackCurrentPage          = "current_page:"
-	CallbackThemeChoseDone       = "chose_theme_done"
-	CallbackTaskCreateDone       = "create_task_done"
-	CallbackTaskCreateCancel     = "create_task_cancel:"
+	// CallbackTaskPrioritySet - установка приоритета задачи
+	CallbackTaskPrioritySet = "set_task_priority:"
+	// CallbackTaskStatusSet - установка статуса задачи
+	CallbackTaskStatusSet = "set_task_status:"
+	// CallbackTaskSetTheme - установка темы задачи
+	CallbackTaskSetTheme = "task_set_theme:"
+	// CallbackTaskUnsetTheme - удаления темы задачи
+	CallbackTaskUnsetTheme = "task_unset_theme:"
+	// CallbackTaskSetThemeDone - завершение выбора тем задачи
+	CallbackTaskSetThemeDone = "task_set_theme_done"
 
+	// CallbackCurrentPage - текущая страница
+	CallbackCurrentPage = "current_page:"
+
+	// CallbackChangePage - смена страницы
 	CallbackChangePage = "change_page:"
 )
 
@@ -67,9 +69,6 @@ const (
 	TimeLayout        = "2006-01-02 15:04:05"
 	ThemeKeyboardSize = 3
 	UnlimitedSize     = -1
-
-	MessageRegisterOperationCreate = "create"
-	MessageRegisterOperationEdit   = "edit"
 
 	MessageRegisterOperationTaskCreate = "create_task"
 	MessageRegisterOperationTaskEdit   = "edit_task"

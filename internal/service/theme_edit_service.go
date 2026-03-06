@@ -11,6 +11,7 @@ import (
 	"tg-todo/internal/utils"
 )
 
+// ConversationEditThemeInit - обработчик разговора инициализации редактирования темы
 func (s *Service) ConversationEditThemeInit(b *gotgbot.Bot, ctx *ext.Context) error {
 	userTGId := ctx.EffectiveSender.User.Id
 	user, err := s.Repository.GetUserByTGId(userTGId)
@@ -35,13 +36,12 @@ func (s *Service) ConversationEditThemeInit(b *gotgbot.Bot, ctx *ext.Context) er
 	message := fmt.Sprintf("Выберите тему для редактирования\n\nСтраница: (1/%d)", int(themesPagesCount))
 	themeMessage, err := b.SendMessage(ctx.EffectiveSender.ChatId, message, &gotgbot.SendMessageOpts{
 		ReplyMarkup: gotgbot.InlineKeyboardMarkup{
-			InlineKeyboard: s.CreateThemePagesInlineKeyboard(themes, 1, themesPagesCount),
+			InlineKeyboard: utils.ChooseThemeInlineKeyboard(themes, int(themesPagesCount), 1),
 		},
 	})
 	if err != nil {
 		return fmt.Errorf("отправка сообщения редактирования темы: %w", err)
 	}
-
 	if err = s.Repository.UpsertMessageRegister(types.MessageRegisterModel{
 		UserId:       user.ID,
 		BotMessageId: themeMessage.MessageId,
@@ -52,6 +52,7 @@ func (s *Service) ConversationEditThemeInit(b *gotgbot.Bot, ctx *ext.Context) er
 	return handlers.NextConversationState(types.ConversationThemeEditChooseTheme)
 }
 
+// ConversationEditThemeChoseTheme - обработчик разговора выбора редактируемой темы
 func (s *Service) ConversationEditThemeChoseTheme(b *gotgbot.Bot, ctx *ext.Context) error {
 	userTGId := ctx.EffectiveSender.User.Id
 	callQuery := ctx.Update.CallbackQuery
@@ -65,7 +66,7 @@ func (s *Service) ConversationEditThemeChoseTheme(b *gotgbot.Bot, ctx *ext.Conte
 	if len(user.Messages) == 0 || user.Messages[0].BotMessageId == 0 {
 		return fmt.Errorf("сообщение редактирования темы не найдено")
 	}
-	themeStr := strings.Replace(callQuery.Data, types.CallbackThemeEditChooseTheme, "", 1)
+	themeStr := strings.Replace(callQuery.Data, types.CallbackThemeChoose, "", 1)
 	themeId, err := strconv.Atoi(themeStr)
 	if err != nil {
 		return fmt.Errorf("получение идентификатора темы из клавиатуры: %w", err)
@@ -81,7 +82,7 @@ func (s *Service) ConversationEditThemeChoseTheme(b *gotgbot.Bot, ctx *ext.Conte
 		MessageId: messageRegister.BotMessageId,
 		ChatId:    ctx.EffectiveSender.ChatId,
 	}); err != nil {
-		return fmt.Errorf("изменение сообщение темы, выбор темы редактирования: %w", err)
+		return fmt.Errorf("изменение сообщение темы, выбор темы для редактирования: %w", err)
 	}
 	if err = s.Repository.UpsertMessageRegister(messageRegister); err != nil {
 		return fmt.Errorf("запись сообщения редактирования темы: %w", err)
@@ -89,6 +90,7 @@ func (s *Service) ConversationEditThemeChoseTheme(b *gotgbot.Bot, ctx *ext.Conte
 	return handlers.NextConversationState(types.ConversationThemeEditSetName)
 }
 
+// ConversationEditThemeChangeThemesPage - обработчик разговора смены страницы клавиатуры, для выбора редактируемой темы
 func (s *Service) ConversationEditThemeChangeThemesPage(b *gotgbot.Bot, ctx *ext.Context) error {
 	userTGId := ctx.EffectiveSender.User.Id
 	callQuery := ctx.Update.CallbackQuery
@@ -102,7 +104,7 @@ func (s *Service) ConversationEditThemeChangeThemesPage(b *gotgbot.Bot, ctx *ext
 	if len(user.Messages) == 0 || user.Messages[0].BotMessageId == 0 {
 		return fmt.Errorf("сообщение редактирования темы не найдено")
 	}
-	pageStr := strings.Replace(callQuery.Data, types.CallbackThemeEditChangeThemesPage, "", 1)
+	pageStr := strings.Replace(callQuery.Data, types.CallbackChangePage, "", 1)
 	page, err := strconv.ParseUint(pageStr, 10, 64)
 	if err != nil {
 		return fmt.Errorf("получение номера страницы клавиатуры тем: %w", err)
@@ -121,7 +123,7 @@ func (s *Service) ConversationEditThemeChangeThemesPage(b *gotgbot.Bot, ctx *ext
 		MessageId: user.Messages[0].BotMessageId,
 		ChatId:    ctx.EffectiveSender.ChatId,
 		ReplyMarkup: gotgbot.InlineKeyboardMarkup{
-			InlineKeyboard: s.CreateThemePagesInlineKeyboard(themes, uint(page), themesPagesCount),
+			InlineKeyboard: utils.ChooseThemeInlineKeyboard(themes, int(themesPagesCount), int(page)),
 		},
 	},
 	); err != nil {
@@ -130,6 +132,7 @@ func (s *Service) ConversationEditThemeChangeThemesPage(b *gotgbot.Bot, ctx *ext
 	return nil
 }
 
+// ConversationEditThemeSetName - обработчик разговора установки имени темы
 func (s *Service) ConversationEditThemeSetName(b *gotgbot.Bot, ctx *ext.Context) error {
 	userTGId := ctx.EffectiveSender.User.Id
 	user, err := s.Repository.GetUserByTGId(userTGId)
@@ -155,7 +158,7 @@ func (s *Service) ConversationEditThemeSetName(b *gotgbot.Bot, ctx *ext.Context)
 	if _, err = b.DeleteMessage(ctx.EffectiveSender.ChatId, ctx.EffectiveMessage.MessageId, nil); err != nil {
 		return fmt.Errorf("удаление сообщения пользователя: %w", err)
 	}
-	if err = s.Repository.DeleteMessageRegisterByUserTGId(userTGId); err != nil {
+	if err = s.Repository.DeleteMessageRegisterByUserId(user.ID); err != nil {
 		return fmt.Errorf("очистка сообщенияя редактирования темы: %w", err)
 	}
 	return handlers.EndConversation()
