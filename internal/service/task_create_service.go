@@ -22,7 +22,7 @@ func (s *Service) ConversationCreateTaskInit(b *gotgbot.Bot, ctx *ext.Context) e
 	if len(user.Messages) > 0 {
 		messageRegister := user.Messages[0]
 		if _, _, err = b.EditMessageText(MessageOperationBeauty(messageRegister), &gotgbot.EditMessageTextOpts{MessageId: messageRegister.BotMessageId, ChatId: ctx.EffectiveSender.ChatId}); err != nil {
-			return fmt.Errorf("изменение прошлого сообщения: %w", err)
+			s.App.Logger.Warn(fmt.Errorf("не удалось изменить прошлое сообщение: %w", err).Error())
 		}
 	}
 	tasks, err := s.Repository.GetTasks(types.TaskFilter{UserTGId: ctx.EffectiveSender.User.Id, SortQuery: types.SortQuery{Size: types.UnlimitedSize, Page: 1}})
@@ -41,7 +41,7 @@ func (s *Service) ConversationCreateTaskInit(b *gotgbot.Bot, ctx *ext.Context) e
 	message := TaskMessageFill("Создание задачи", "Введите имя задачи", createdTask, nil)
 	taskMessage, err := b.SendMessage(ctx.EffectiveSender.ChatId, message, &gotgbot.SendMessageOpts{
 		ReplyMarkup: gotgbot.InlineKeyboardMarkup{
-			InlineKeyboard: utils.TaskInlineKeyboard(types.ConversationTaskCreateSetPriority),
+			InlineKeyboard: utils.TaskInlineKeyboard(types.ConversationTaskCreateSetPriority, true),
 		},
 	})
 	if err != nil {
@@ -74,15 +74,8 @@ func (s *Service) ConversationCreateTaskSetName(b *gotgbot.Bot, ctx *ext.Context
 	if err = s.Repository.UpdateTask(task); err != nil {
 		return fmt.Errorf("обновление имени задачи: %w", err)
 	}
-	message := TaskMessageFill("Создание задачи", "Выберите приоритет", task, task.Themes)
-	if _, _, err = b.EditMessageText(message, &gotgbot.EditMessageTextOpts{
-		MessageId: messageRegister.BotMessageId,
-		ChatId:    ctx.EffectiveSender.ChatId,
-		ReplyMarkup: gotgbot.InlineKeyboardMarkup{
-			InlineKeyboard: append(utils.PriorityButtons(), utils.TaskInlineKeyboard(types.ConversationTaskCreateSetDeadline)...),
-		},
-	}); err != nil {
-		return fmt.Errorf("изменение сообщения задачи, имя задачи: %w", err)
+	if err = s.GenerateTaskPriorityMessage(b, ctx.EffectiveSender.ChatId, messageRegister, task, "Создание задачи", types.ConversationTaskCreateSetDeadline); err != nil {
+		return err
 	}
 	if _, err = b.DeleteMessage(ctx.EffectiveSender.ChatId, ctx.EffectiveMessage.MessageId, nil); err != nil {
 		return fmt.Errorf("удаление сообщения имени задачи")
@@ -114,15 +107,8 @@ func (s *Service) ConversationCreateTaskSetPriority(b *gotgbot.Bot, ctx *ext.Con
 	if err = s.Repository.UpdateTask(task); err != nil {
 		return fmt.Errorf("обновление приоритета задачи: %w", err)
 	}
-	message := TaskMessageFill("Создание задачи", fmt.Sprintf("Введите срок в формате %s", types.TimeLayout), task, task.Themes)
-	if _, _, err = b.EditMessageText(message, &gotgbot.EditMessageTextOpts{
-		MessageId: messageRegister.BotMessageId,
-		ChatId:    ctx.EffectiveSender.ChatId,
-		ReplyMarkup: gotgbot.InlineKeyboardMarkup{
-			InlineKeyboard: append(utils.CreateCalendarButtons(), utils.TaskInlineKeyboard(types.ConversationTaskCreateSetTheme)...),
-		},
-	}); err != nil {
-		return fmt.Errorf("изменение сообщения задачи, приоритет задачи: %w", err)
+	if err = s.GenerateTaskDeadlineMessage(b, ctx.EffectiveSender.ChatId, messageRegister, task, "Создание задачи", types.ConversationTaskCreateSetTheme); err != nil {
+		return err
 	}
 	return handlers.NextConversationState(types.ConversationTaskCreateSetDeadline)
 }
@@ -150,24 +136,8 @@ func (s *Service) ConversationCreateTaskSetDeadline(b *gotgbot.Bot, ctx *ext.Con
 	if err = s.Repository.UpdateTask(task); err != nil {
 		return fmt.Errorf("обновление сроков задачи: %w", err)
 	}
-	themeFilter := types.ThemeFilter{UserTGId: ctx.EffectiveSender.User.Id, SortQuery: types.SortQuery{Size: types.ThemeKeyboardSize, Page: 1}}
-	themes, err := s.Repository.GetThemes(themeFilter)
-	if err != nil {
-		return fmt.Errorf("получение тем для клавиатуры: %w", err)
-	}
-	themesPagesCount, err := s.Repository.GetThemePages(themeFilter)
-	if err != nil {
-		return fmt.Errorf("получение количества страниц тем: %w", err)
-	}
-	message := TaskMessageFill("Создание задачи", fmt.Sprintf("Выберите темы.\nСтраница: (%d/%v)", themeFilter.Page, themesPagesCount), task, task.Themes)
-	if _, _, err = b.EditMessageText(message, &gotgbot.EditMessageTextOpts{
-		MessageId: messageRegister.BotMessageId,
-		ChatId:    ctx.EffectiveSender.ChatId,
-		ReplyMarkup: gotgbot.InlineKeyboardMarkup{
-			InlineKeyboard: utils.ChooseThemeForTaskInlineKeyboard(task, themes, int(themesPagesCount), 1),
-		},
-	}); err != nil {
-		return fmt.Errorf("изменение сообщения задачи, сроки задачи: %w", err)
+	if err = s.GenerateTaskThemeMessage(b, ctx.EffectiveSender.ChatId, userTGId, messageRegister, task, "Создание задачи", ""); err != nil {
+		return err
 	}
 	if _, err = b.DeleteMessage(ctx.EffectiveSender.ChatId, ctx.EffectiveMessage.MessageId, nil); err != nil {
 		return fmt.Errorf("удаление сообщения сроков задачи")

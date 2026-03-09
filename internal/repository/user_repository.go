@@ -12,6 +12,7 @@ func (r *Repository) GetUserByTGId(tgId int64) (types.UserModel, error) {
 	var user types.UserModel
 	if err := r.Database.
 		Preload("Messages").
+		Preload("Messages").
 		Preload("Messages.Theme").
 		Preload("Messages.Task").
 		Preload("Messages.Task.Themes").

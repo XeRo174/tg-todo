@@ -41,13 +41,20 @@ func Contains(themes []types.ThemeModel, themeId uint) bool {
 }
 
 // TaskInlineKeyboard - формирует клавиатуру работы с задачей
-func TaskInlineKeyboard(nextField string) [][]gotgbot.InlineKeyboardButton {
+func TaskInlineKeyboard(nextField string, allowSkip bool) [][]gotgbot.InlineKeyboardButton {
 	var buttons [][]gotgbot.InlineKeyboardButton
-	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
-		{Text: "Завершить", CallbackData: types.CallbackTaskComplete},
-		{Text: "Пропуск поля", CallbackData: fmt.Sprintf("%s%s", types.CallbackTaskFieldSkip, nextField)},
-		{Text: "Прекратить", CallbackData: types.CallbackTaskStop},
-	})
+	if allowSkip {
+		buttons = append(buttons, []gotgbot.InlineKeyboardButton{
+			{Text: "Завершить", CallbackData: types.CallbackTaskComplete},
+			{Text: "Пропуск поля", CallbackData: fmt.Sprintf("%s%s", types.CallbackTaskFieldSkip, nextField)},
+			{Text: "Прекратить", CallbackData: types.CallbackTaskStop},
+		})
+	} else {
+		buttons = append(buttons, []gotgbot.InlineKeyboardButton{
+			{Text: "Завершить", CallbackData: types.CallbackTaskComplete},
+			{Text: "Прекратить", CallbackData: types.CallbackTaskStop},
+		})
+	}
 	return buttons
 }
 
@@ -108,10 +115,10 @@ func ChooseThemeForTaskInlineKeyboard(task types.TaskModel, themesByPage []types
 	}
 	if totalPages > 1 {
 		buttons = append(buttons, CreateArrowButtons(currentPage, totalPages)...)
-		buttons = append(buttons, []gotgbot.InlineKeyboardButton{
-			{Text: "Завершить выбор", CallbackData: types.CallbackTaskSetThemeDone}},
-		)
 	}
+	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
+		{Text: "Завершить выбор", CallbackData: types.CallbackTaskSetThemeDone}},
+	)
 	return buttons
 }
 

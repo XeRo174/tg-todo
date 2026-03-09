@@ -19,7 +19,7 @@ func (s *Service) ConversationCreateThemeInit(b *gotgbot.Bot, ctx *ext.Context) 
 	if len(user.Messages) > 0 {
 		messageRegister := user.Messages[0]
 		if _, _, err = b.EditMessageText(MessageOperationBeauty(messageRegister), &gotgbot.EditMessageTextOpts{MessageId: messageRegister.BotMessageId, ChatId: ctx.EffectiveSender.ChatId}); err != nil {
-			return fmt.Errorf("изменение прошлого сообщения: %w", err)
+			s.App.Logger.Warn(fmt.Errorf("не удалось изменить прошлое сообщение: %w", err).Error())
 		}
 	}
 	themes, err := s.Repository.GetThemes(types.ThemeFilter{UserTGId: userTGId, SortQuery: types.SortQuery{Size: types.ThemeKeyboardSize, Page: 1}})

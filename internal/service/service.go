@@ -103,22 +103,22 @@ func (s *Service) Start() {
 		map[string][]ext.Handler{
 			types.ConversationTaskCreateSetName: {
 				handlers.NewMessage(noCommand, s.ConversationCreateTaskSetName),
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.ConversationCreateTaskSkipField), //skip field old
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.CallbackTaskFieldSkip),
 			},
 			types.ConversationTaskCreateSetPriority: {
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskPrioritySet), s.ConversationCreateTaskSetPriority),
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.ConversationCreateTaskSkipField), //skip field old
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.CallbackTaskFieldSkip),
 			},
 			types.ConversationTaskCreateSetDeadline: {
 				handlers.NewMessage(noCommand, s.ConversationCreateTaskSetDeadline),
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.ConversationCreateTaskSkipField), //skip field old
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.CallbackTaskFieldSkip),
 			},
 			types.ConversationTaskCreateSetTheme: {
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskSetTheme), s.ConversationCreateTaskSetTheme),
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskUnsetTheme), s.ConversationCreateTaskUnsetTheme),
 				handlers.NewCallback(callbackquery.Equal(types.CallbackTaskSetThemeDone), s.CallbackTaskDoneTheme),
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackChangePage), s.CallbackTaskChangeThemesPage),
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.ConversationCreateTaskSkipField), //skip field old
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.CallbackTaskFieldSkip),
 			},
 		},
 		&handlers.ConversationOpts{
@@ -140,18 +140,22 @@ func (s *Service) Start() {
 			},
 			types.ConversationTaskEditSetName: {
 				handlers.NewMessage(noCommand, s.ConversationEditTaskSetName),
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.CallbackTaskFieldSkip),
 			},
 			types.ConversationTaskEditSetPriority: {
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskPrioritySet), s.ConversationEditTaskSetPriority),
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.CallbackTaskFieldSkip),
 			},
 			types.ConversationTaskEditSetDeadline: {
 				handlers.NewMessage(noCommand, s.ConversationEditTaskSetDeadline),
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.CallbackTaskFieldSkip),
 			},
 			types.ConversationTaskEditSetTheme: {
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskSetTheme), s.ConversationEditTaskSetTheme),
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskUnsetTheme), s.ConversationEditTaskUnsetTheme),
 				handlers.NewCallback(callbackquery.Equal(types.CallbackTaskSetThemeDone), s.CallbackTaskDoneTheme),
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackChangePage), s.CallbackTaskChangeThemesPage),
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.CallbackTaskFieldSkip),
 			},
 		},
 		&handlers.ConversationOpts{
