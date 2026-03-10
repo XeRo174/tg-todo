@@ -55,6 +55,16 @@ const (
 
 	// CallbackChangePage - смена страницы
 	CallbackChangePage = "change_page:"
+
+	CallbackDeadlineShowYears  = "deadline_show_year:"
+	CallbackDeadlineChooseYear = "deadline_choose_year:"
+
+	CallbackDeadlineShowMonths  = "deadline_show_month:"
+	CallbackDeadlineChooseMonth = "deadline_choose_month:"
+
+	CallbackDeadlineChoose = "deadline_choose:"
+
+	CallbackEmpty = "callback_empty_skip"
 )
 
 // Список констант определяющих команды

@@ -110,8 +110,15 @@ func (s *Service) Start() {
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.CallbackTaskFieldSkip),
 			},
 			types.ConversationTaskCreateSetDeadline: {
-				handlers.NewMessage(noCommand, s.ConversationCreateTaskSetDeadline),
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.CallbackTaskFieldSkip),
+
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineShowYears), s.CallbackTaskDeadlineShowYears),
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineChooseYear), s.CallbackTaskDeadlineChooseYear),
+
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineShowMonths), s.CallbackTaskDeadlineShowMonths),
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineChooseMonth), s.CallbackTaskDeadlineChooseMonth),
+
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineChoose), s.ConversationCreateTaskSetDeadline),
 			},
 			types.ConversationTaskCreateSetTheme: {
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskSetTheme), s.ConversationCreateTaskSetTheme),
@@ -147,8 +154,15 @@ func (s *Service) Start() {
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.CallbackTaskFieldSkip),
 			},
 			types.ConversationTaskEditSetDeadline: {
-				handlers.NewMessage(noCommand, s.ConversationEditTaskSetDeadline),
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.CallbackTaskFieldSkip),
+
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineShowYears), s.CallbackTaskDeadlineShowYears),
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineChooseYear), s.CallbackTaskDeadlineChooseYear),
+
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineShowMonths), s.CallbackTaskDeadlineShowMonths),
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineChooseMonth), s.CallbackTaskDeadlineChooseMonth),
+
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineChoose), s.ConversationEditTaskSetDeadline),
 			},
 			types.ConversationTaskEditSetTheme: {
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskSetTheme), s.ConversationEditTaskSetTheme),

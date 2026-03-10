@@ -9,6 +9,7 @@ import (
 	"strings"
 	"tg-todo/internal/types"
 	"tg-todo/internal/utils"
+	"time"
 )
 
 // TaskMessageFill - формирует сообщение работы с задачей
@@ -131,12 +132,12 @@ func (s *Service) CallbackTaskFieldSkip(b *gotgbot.Bot, ctx *ext.Context) error 
 		}
 		return handlers.NextConversationState(types.ConversationTaskEditSetPriority)
 	case types.ConversationTaskCreateSetDeadline:
-		if err = s.GenerateTaskDeadlineMessage(b, ctx.EffectiveSender.ChatId, messageRegister, task, "Создание задачи", types.ConversationTaskCreateSetTheme); err != nil {
+		if err = s.GenerateTaskDeadlineMessage(b, ctx.EffectiveSender.ChatId, messageRegister, task, time.Now().Year(), int(time.Now().Month()), time.Now().Day(), "Создание задачи", types.ConversationTaskCreateSetTheme); err != nil {
 			return err
 		}
 		return handlers.NextConversationState(types.ConversationTaskCreateSetDeadline)
 	case types.ConversationTaskEditSetDeadline:
-		if err = s.GenerateTaskDeadlineMessage(b, ctx.EffectiveSender.ChatId, messageRegister, task, "Редактирование задачи", types.ConversationTaskEditSetTheme); err != nil {
+		if err = s.GenerateTaskDeadlineMessage(b, ctx.EffectiveSender.ChatId, messageRegister, task, task.Deadline.Year(), int(task.Deadline.Month()), task.Deadline.Day(), "Редактирование задачи", types.ConversationTaskEditSetTheme); err != nil {
 			return err
 		}
 		return handlers.NextConversationState(types.ConversationTaskEditSetDeadline)
@@ -329,6 +330,182 @@ func (s *Service) CallbackTaskChangeTasksPage(b *gotgbot.Bot, ctx *ext.Context) 
 	return nil
 }
 
+// CallbackTaskDeadlineShowYears - обработчик отображение клавиатуры выбора года
+func (s *Service) CallbackTaskDeadlineShowYears(b *gotgbot.Bot, ctx *ext.Context) error {
+	userTGId := ctx.EffectiveSender.User.Id
+	callQuery := ctx.Update.CallbackQuery
+	if _, err := callQuery.Answer(b, &gotgbot.AnswerCallbackQueryOpts{Text: "Отображение годов"}); err != nil {
+		return fmt.Errorf("ответ на отображение годов: %w", err)
+	}
+	user, err := s.Repository.GetUserByTGId(userTGId)
+	if err != nil {
+		return fmt.Errorf("%s: %w", types.ErrorStrokeFindUserByTG, err)
+	}
+	if len(user.Messages) == 0 || user.Messages[0].BotMessageId == 0 || user.Messages[0].TaskId == 0 {
+		return fmt.Errorf("сообщение создания задачи не найдено")
+	}
+	messageRegister := user.Messages[0]
+	task := messageRegister.Task
+	yearStr := strings.Replace(callQuery.Data, types.CallbackDeadlineShowYears, "", 1)
+	year, err := strconv.Atoi(yearStr)
+	if err != nil {
+		return fmt.Errorf("получение года из клавиатуры: %w", err)
+	}
+	var operationName string
+	switch messageRegister.Operation {
+	case types.MessageRegisterOperationTaskEdit:
+		operationName = "Редактирование задачи"
+	case types.MessageRegisterOperationTaskCreate:
+		operationName = "Создание задачи"
+	default:
+		return fmt.Errorf("идентификация типа работы с задачей: %s", messageRegister.Operation)
+	}
+	message := TaskMessageFill(fmt.Sprintf("%s", operationName), "Выберите год", task, task.Themes)
+	if _, _, err = b.EditMessageText(message, &gotgbot.EditMessageTextOpts{
+		MessageId: messageRegister.BotMessageId,
+		ChatId:    ctx.EffectiveSender.ChatId,
+		ReplyMarkup: gotgbot.InlineKeyboardMarkup{
+			InlineKeyboard: utils.CreateYearsButtons(year),
+		},
+	}); err != nil {
+		return fmt.Errorf("изменение сообщения задача, '%s' выбор тем завершен: %w", operationName, err)
+	}
+	return nil
+}
+
+// CallbackTaskDeadlineChooseYear - обработчик выбора года
+func (s *Service) CallbackTaskDeadlineChooseYear(b *gotgbot.Bot, ctx *ext.Context) error {
+	userTGId := ctx.EffectiveSender.User.Id
+	callQuery := ctx.Update.CallbackQuery
+	if _, err := callQuery.Answer(b, &gotgbot.AnswerCallbackQueryOpts{Text: "Год выбран"}); err != nil {
+		return fmt.Errorf("ответ на выбор года: %w", err)
+	}
+	user, err := s.Repository.GetUserByTGId(userTGId)
+	if err != nil {
+		return fmt.Errorf("%s: %w", types.ErrorStrokeFindUserByTG, err)
+	}
+	if len(user.Messages) == 0 || user.Messages[0].BotMessageId == 0 || user.Messages[0].TaskId == 0 {
+		return fmt.Errorf("сообщение создания задачи не найдено")
+	}
+	messageRegister := user.Messages[0]
+	task := messageRegister.Task
+	yearStr := strings.Replace(callQuery.Data, types.CallbackDeadlineChooseYear, "", 1)
+	year, err := strconv.Atoi(yearStr)
+	if err != nil {
+		return fmt.Errorf("получение года из клавиатуры: %w", err)
+	}
+	//time.Utc заменить на user.Timezone
+	if task.Deadline.IsZero() {
+		task.Deadline = time.Date(year, time.Now().Month(), 1, 0, 0, 0, 0, time.UTC)
+	} else {
+		task.Deadline = time.Date(year, task.Deadline.Month(), 1, task.Deadline.Hour(), task.Deadline.Minute(), task.Deadline.Minute(), 0, time.UTC)
+	}
+	if err = s.Repository.UpdateTask(task); err != nil {
+		return fmt.Errorf("обновление сроков задачи: %w", err)
+	}
+	var operationName string
+	switch messageRegister.Operation {
+	case types.MessageRegisterOperationTaskEdit:
+		operationName = "Редактирование задачи"
+	case types.MessageRegisterOperationTaskCreate:
+		operationName = "Создание задачи"
+	default:
+		return fmt.Errorf("идентификация типа работы с задачей: %s", messageRegister.Operation)
+	}
+	if err = s.GenerateTaskDeadlineMessage(b, ctx.EffectiveSender.ChatId, messageRegister, task, year, int(task.Deadline.Month()), task.Deadline.Day(), operationName, types.ConversationTaskCreateSetTheme); err != nil {
+		return err
+	}
+	return nil
+}
+
+// CallbackTaskDeadlineShowMonths - обработчик отображения клавиатуры выбора месяца
+func (s *Service) CallbackTaskDeadlineShowMonths(b *gotgbot.Bot, ctx *ext.Context) error {
+	userTGId := ctx.EffectiveSender.User.Id
+	callQuery := ctx.Update.CallbackQuery
+	if _, err := callQuery.Answer(b, &gotgbot.AnswerCallbackQueryOpts{Text: "Отображение месяцев"}); err != nil {
+		return fmt.Errorf("ответ на отображение месяцев: %w", err)
+	}
+	user, err := s.Repository.GetUserByTGId(userTGId)
+	if err != nil {
+		return fmt.Errorf("%s: %w", types.ErrorStrokeFindUserByTG, err)
+	}
+	if len(user.Messages) == 0 || user.Messages[0].BotMessageId == 0 || user.Messages[0].TaskId == 0 {
+		return fmt.Errorf("сообщение создания задачи не найдено")
+	}
+	messageRegister := user.Messages[0]
+	task := messageRegister.Task
+	monthStr := strings.Replace(callQuery.Data, types.CallbackDeadlineShowMonths, "", 1)
+	month, err := strconv.Atoi(monthStr)
+	if err != nil {
+		return fmt.Errorf("получение месяца из клавиатуры: %w", err)
+	}
+	var operationName string
+	switch messageRegister.Operation {
+	case types.MessageRegisterOperationTaskEdit:
+		operationName = "Редактирование задачи"
+	case types.MessageRegisterOperationTaskCreate:
+		operationName = "Создание задачи"
+	default:
+		return fmt.Errorf("идентификация типа работы с задачей: %s", messageRegister.Operation)
+	}
+	message := TaskMessageFill(fmt.Sprintf("%s", operationName), "Выберите месяц", task, task.Themes)
+	if _, _, err = b.EditMessageText(message, &gotgbot.EditMessageTextOpts{
+		MessageId: messageRegister.BotMessageId,
+		ChatId:    ctx.EffectiveSender.ChatId,
+		ReplyMarkup: gotgbot.InlineKeyboardMarkup{
+			InlineKeyboard: utils.CreateMonthsButtons(month),
+		},
+	}); err != nil {
+		return fmt.Errorf("изменение сообщения задача, '%s' выбор тем завершен: %w", operationName, err)
+	}
+	return nil
+}
+
+// CallbackTaskDeadlineChooseMonth - обработчик выбора месяца
+func (s *Service) CallbackTaskDeadlineChooseMonth(b *gotgbot.Bot, ctx *ext.Context) error {
+	userTGId := ctx.EffectiveSender.User.Id
+	callQuery := ctx.Update.CallbackQuery
+	if _, err := callQuery.Answer(b, &gotgbot.AnswerCallbackQueryOpts{Text: "Месяц выбран"}); err != nil {
+		return fmt.Errorf("ответ на выбор месяца: %w", err)
+	}
+	user, err := s.Repository.GetUserByTGId(userTGId)
+	if err != nil {
+		return fmt.Errorf("%s: %w", types.ErrorStrokeFindUserByTG, err)
+	}
+	if len(user.Messages) == 0 || user.Messages[0].BotMessageId == 0 || user.Messages[0].TaskId == 0 {
+		return fmt.Errorf("сообщение создания задачи не найдено")
+	}
+	messageRegister := user.Messages[0]
+	task := messageRegister.Task
+	monthStr := strings.Replace(callQuery.Data, types.CallbackDeadlineChooseMonth, "", 1)
+	month, err := strconv.Atoi(monthStr)
+	if err != nil {
+		return fmt.Errorf("получение года из клавиатуры: %w", err)
+	}
+	//time.Utc заменить на user.Timezone
+	if task.Deadline.IsZero() {
+		task.Deadline = time.Date(time.Now().Year(), time.Month(month), 1, 0, 0, 0, 0, time.UTC)
+	} else {
+		task.Deadline = time.Date(task.Deadline.Year(), time.Month(month), 1, task.Deadline.Hour(), task.Deadline.Minute(), task.Deadline.Minute(), 0, time.UTC)
+	}
+	if err = s.Repository.UpdateTask(task); err != nil {
+		return fmt.Errorf("обновление сроков задачи: %w", err)
+	}
+	var operationName string
+	switch messageRegister.Operation {
+	case types.MessageRegisterOperationTaskEdit:
+		operationName = "Редактирование задачи"
+	case types.MessageRegisterOperationTaskCreate:
+		operationName = "Создание задачи"
+	default:
+		return fmt.Errorf("идентификация типа работы с задачей: %s", messageRegister.Operation)
+	}
+	if err = s.GenerateTaskDeadlineMessage(b, ctx.EffectiveSender.ChatId, messageRegister, task, task.Deadline.Year(), int(task.Deadline.Month()), task.Deadline.Day(), operationName, types.ConversationTaskCreateSetTheme); err != nil {
+		return err
+	}
+	return nil
+}
+
 // GenerateTaskNameMessage - сформировать сообщение запроса имени задачи
 func (s *Service) GenerateTaskNameMessage(b *gotgbot.Bot, chatId int64, messageRegister types.MessageRegisterModel, task types.TaskModel, messageTitle, stage string) error {
 	message := TaskMessageFill(messageTitle, "Введите имя задачи", task, task.Themes)
@@ -360,13 +537,13 @@ func (s *Service) GenerateTaskPriorityMessage(b *gotgbot.Bot, chatId int64, mess
 }
 
 // GenerateTaskDeadlineMessage - сформировать сообщение запроса сроков задачи
-func (s *Service) GenerateTaskDeadlineMessage(b *gotgbot.Bot, chatId int64, messageRegister types.MessageRegisterModel, task types.TaskModel, messageTitle, stage string) error {
+func (s *Service) GenerateTaskDeadlineMessage(b *gotgbot.Bot, chatId int64, messageRegister types.MessageRegisterModel, task types.TaskModel, year, month, day int, messageTitle, stage string) error {
 	message := TaskMessageFill(messageTitle, fmt.Sprintf("Введите срок в формате %s", types.TimeLayout), task, task.Themes)
 	if _, _, err := b.EditMessageText(message, &gotgbot.EditMessageTextOpts{
 		MessageId: messageRegister.BotMessageId,
 		ChatId:    chatId,
 		ReplyMarkup: gotgbot.InlineKeyboardMarkup{
-			InlineKeyboard: append(utils.CreateCalendarButtons(), utils.TaskInlineKeyboard(stage, true)...),
+			InlineKeyboard: append(utils.CreateCalendarButtons(year, month, day), utils.TaskInlineKeyboard(stage, true)...),
 		},
 	}); err != nil {
 		return fmt.Errorf("изменение сообщения задачи, приоритет задачи: %w", err)

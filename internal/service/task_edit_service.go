@@ -177,7 +177,7 @@ func (s *Service) ConversationEditTaskSetPriority(b *gotgbot.Bot, ctx *ext.Conte
 	if err = s.Repository.UpdateTask(task); err != nil {
 		return fmt.Errorf("обновление приоритета задачи: %w", err)
 	}
-	if err = s.GenerateTaskDeadlineMessage(b, ctx.EffectiveSender.ChatId, messageRegister, task, "Редактирование задачи", types.ConversationTaskEditSetTheme); err != nil {
+	if err = s.GenerateTaskDeadlineMessage(b, ctx.EffectiveSender.ChatId, messageRegister, task, task.Deadline.Year(), int(task.Deadline.Month()), task.Deadline.Day(), "Редактирование задачи", types.ConversationTaskEditSetTheme); err != nil {
 		return err
 	}
 	return handlers.NextConversationState(types.ConversationTaskEditSetDeadline)
@@ -186,6 +186,10 @@ func (s *Service) ConversationEditTaskSetPriority(b *gotgbot.Bot, ctx *ext.Conte
 // ConversationEditTaskSetDeadline - обработчик разговора установки сроков редактируемой задачи
 func (s *Service) ConversationEditTaskSetDeadline(b *gotgbot.Bot, ctx *ext.Context) error {
 	userTGId := ctx.EffectiveSender.User.Id
+	callQuery := ctx.Update.CallbackQuery
+	if _, err := callQuery.Answer(b, &gotgbot.AnswerCallbackQueryOpts{Text: "Дата выбрана"}); err != nil {
+		return fmt.Errorf("ответ на выбор сроков")
+	}
 	user, err := s.Repository.GetUserByTGId(userTGId)
 	if err != nil {
 		return fmt.Errorf("%s: %w", types.ErrorStrokeFindUserByTG, err)
@@ -195,22 +199,40 @@ func (s *Service) ConversationEditTaskSetDeadline(b *gotgbot.Bot, ctx *ext.Conte
 	}
 	messageRegister := user.Messages[0]
 	task := messageRegister.Task
-	deadline, err := time.Parse(types.TimeLayout, ctx.EffectiveMessage.Text)
-	if err != nil {
-		if _, err = ctx.EffectiveMessage.Reply(b, fmt.Sprintf("обработка сроков задачи, используйте формат %s", types.TimeLayout), nil); err != nil {
-			return fmt.Errorf("ответ про правильный формат сроков: %w", err)
+	callQueryValue := strings.Replace(callQuery.Data, types.CallbackDeadlineChoose, "", 1)
+	deadlineValues := strings.Split(callQueryValue, "-")
+	var day, month, year int
+	for _, deadlineValue := range deadlineValues {
+		if strings.HasPrefix(deadlineValue, "day:") {
+			dayStr := strings.Replace(deadlineValue, "day:", "", 1)
+			day, err = strconv.Atoi(dayStr)
+			if err != nil {
+				return fmt.Errorf("получение дня из клавиатуры: %w", err)
+			}
 		}
-		return handlers.NextConversationState(types.ConversationTaskEditSetDeadline)
+		if strings.HasPrefix(deadlineValue, "month:") {
+			monthStr := strings.Replace(deadlineValue, "month:", "", 1)
+			month, err = strconv.Atoi(monthStr)
+			if err != nil {
+				return fmt.Errorf("получение месяца из клавиатуры: %w", err)
+			}
+		}
+		if strings.HasPrefix(deadlineValue, "year:") {
+			yearStr := strings.Replace(deadlineValue, "year:", "", 1)
+			year, err = strconv.Atoi(yearStr)
+			if err != nil {
+				return fmt.Errorf("получение года из клавиатуры: %w", err)
+			}
+		}
 	}
+	//time.Utc заменить на user.Timezone
+	deadline := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC)
 	task.Deadline = deadline
 	if err = s.Repository.UpdateTask(task); err != nil {
 		return fmt.Errorf("обновление сроков задачи: %w", err)
 	}
 	if err = s.GenerateTaskThemeMessage(b, ctx.EffectiveSender.ChatId, userTGId, messageRegister, task, "Редактирование задачи", ""); err != nil {
 		return err
-	}
-	if _, err = b.DeleteMessage(ctx.EffectiveSender.ChatId, ctx.EffectiveMessage.MessageId, nil); err != nil {
-		return fmt.Errorf("удаление сообщения новых сроков задачи")
 	}
 	return handlers.NextConversationState(types.ConversationTaskEditSetTheme)
 }
