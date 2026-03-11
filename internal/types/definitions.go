@@ -2,6 +2,9 @@ package types
 
 // Список констант определяющих этапы разговоров
 const (
+	ConversationUserEditInit           = "conversation_user_edit_init"
+	ConversationUserEditChooseTimezone = "conversation_user_edit_choose_timezone"
+
 	ConversationThemeCreateInit    = "conversation_theme_create_init"
 	ConversationThemeCreateSetName = "conversation_theme_create_set_name"
 
@@ -27,6 +30,9 @@ const (
 
 // Список констант определяющих ключи callback
 const (
+	// CallbackUserSetTimezone - установка временной зоны пользователя
+	CallbackUserSetTimezone = "set_user_timezone:"
+
 	// CallbackThemeChoose - выбор темы для редактирования (новый)
 	CallbackThemeChoose = "theme_choose:"
 
@@ -56,23 +62,32 @@ const (
 	// CallbackChangePage - смена страницы
 	CallbackChangePage = "change_page:"
 
-	CallbackDeadlineShowYears  = "deadline_show_year:"
+	// CallbackDeadlineShow - выбор параметров сроков для отображения
+	CallbackDeadlineShow = "deadline_show:"
+
+	// CallbackDeadlineChooseYear - установка года сроков
 	CallbackDeadlineChooseYear = "deadline_choose_year:"
-
-	CallbackDeadlineShowMonths  = "deadline_show_month:"
+	// CallbackDeadlineChooseMonth - установка месяца сроков
 	CallbackDeadlineChooseMonth = "deadline_choose_month:"
-
-	CallbackDeadlineChoose = "deadline_choose:"
+	// CallbackDeadlineChooseDay - установка дня сроков
+	CallbackDeadlineChooseDay = "deadline_choose_day:"
+	// CallbackDeadlineChooseHour - установка часа сроков
+	CallbackDeadlineChooseHour = "deadline_choose_hour:"
+	// CallbackDeadlineChooseMinute - установка минут сроков
+	CallbackDeadlineChooseMinute = "deadline_choose_minute:"
+	// CallbackTaskSetDeadlineDone - завершение установки сроков
+	CallbackTaskSetDeadlineDone = "task_set_deadline_done:"
 
 	CallbackEmpty = "callback_empty_skip"
 )
 
 // Список констант определяющих команды
 const (
-	CommandThemeCreateInit = "create_theme"
-	CommandThemeEditInit   = "edit_theme"
-	CommandTaskCreateInit  = "create_task"
-	CommandTaskEditInit    = "edit_task"
+	CommandThemeCreateInit  = "create_theme"
+	CommandThemeEditInit    = "edit_theme"
+	CommandTaskCreateInit   = "create_task"
+	CommandTaskEditInit     = "edit_task"
+	CommandUserTimezoneEdit = "edit_user"
 )
 
 const (
@@ -85,6 +100,14 @@ const (
 
 	MessageRegisterOperationThemeCreate = "create_theme"
 	MessageRegisterOperationThemeEdit   = "edit_theme"
+
+	MessageRegisterOperationUserEdit = "edit_user"
+
+	DeadlineShowYears   = "years"
+	DeadlineShowMonths  = "months"
+	DeadlineShowDays    = "days"
+	DeadlineShowHours   = "hours"
+	DeadlineShowMinutes = "minutes"
 )
 
 const (

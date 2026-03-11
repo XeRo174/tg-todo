@@ -41,6 +41,44 @@ func Contains(themes []types.ThemeModel, themeId uint) bool {
 	return false
 }
 
+func TimezonesInlineKeyboard() [][]gotgbot.InlineKeyboardButton {
+	var buttons [][]gotgbot.InlineKeyboardButton
+	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
+		{Text: fmt.Sprintf("Калиниград (UTC+2)"), CallbackData: fmt.Sprintf("%s%s", types.CallbackUserSetTimezone, "Europe/Kaliningrad")},
+	})
+	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
+		{Text: fmt.Sprintf("Москва (UTC+3)"), CallbackData: fmt.Sprintf("%s%s", types.CallbackUserSetTimezone, "Europe/Moscow")},
+	})
+	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
+		{Text: fmt.Sprintf("Самара (UTC+4)"), CallbackData: fmt.Sprintf("%s%s", types.CallbackUserSetTimezone, "Europe/Samara")},
+	})
+	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
+		{Text: fmt.Sprintf("Екатеринбург (UTC+5)"), CallbackData: fmt.Sprintf("%s%s", types.CallbackUserSetTimezone, "Asia/Yekaterinburg")},
+	})
+	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
+		{Text: fmt.Sprintf("Омск (UTC+6)"), CallbackData: fmt.Sprintf("%s%s", types.CallbackUserSetTimezone, "Asia/Omsk")},
+	})
+	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
+		{Text: fmt.Sprintf("Красноярск (UTC+7)"), CallbackData: fmt.Sprintf("%s%s", types.CallbackUserSetTimezone, "Asia/Krasnoyarsk")},
+	})
+	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
+		{Text: fmt.Sprintf("Иркутск (UTC+8)"), CallbackData: fmt.Sprintf("%s%s", types.CallbackUserSetTimezone, "Asia/Irkutsk")},
+	})
+	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
+		{Text: fmt.Sprintf("Якутстк (UTC+9)"), CallbackData: fmt.Sprintf("%s%s", types.CallbackUserSetTimezone, "Asia/Yakutsk")},
+	})
+	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
+		{Text: fmt.Sprintf("Владивосток (UTC+10)"), CallbackData: fmt.Sprintf("%s%s", types.CallbackUserSetTimezone, "Asia/Vladivostok")},
+	})
+	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
+		{Text: fmt.Sprintf("Магадан (UTC+11)"), CallbackData: fmt.Sprintf("%s%s", types.CallbackUserSetTimezone, "Asia/Magadan")},
+	})
+	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
+		{Text: fmt.Sprintf("Камчатка (UTC+12)"), CallbackData: fmt.Sprintf("%s%s", types.CallbackUserSetTimezone, "Asia/Kamchatka")},
+	})
+	return buttons
+}
+
 // TaskInlineKeyboard - формирует клавиатуру работы с задачей
 func TaskInlineKeyboard(nextField string, allowSkip bool) [][]gotgbot.InlineKeyboardButton {
 	var buttons [][]gotgbot.InlineKeyboardButton
@@ -149,14 +187,19 @@ func CreateArrowButtons(currentPage, totalPages int) [][]gotgbot.InlineKeyboardB
 }
 
 // CreateCalendarButtons - создание клавиатуры для сроков задач
-func CreateCalendarButtons(chosenYear, chosenMonthNumber, day int) [][]gotgbot.InlineKeyboardButton {
-	chosenMonth := time.Month(chosenMonthNumber)
+func CreateCalendarButtons(chosenDate time.Time) [][]gotgbot.InlineKeyboardButton {
+
+	chosenYear := chosenDate.Year()
+	chosenMonth := chosenDate.Month()
+	chosenDay := chosenDate.Day()
+	chosenHour := chosenDate.Hour()
+	chosenMinute := chosenDate.Minute()
 	var buttons [][]gotgbot.InlineKeyboardButton
 	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
-		{Text: fmt.Sprintf("%d", chosenYear), CallbackData: fmt.Sprintf("%s%d", types.CallbackDeadlineShowYears, chosenYear)},
+		{Text: fmt.Sprintf("%d", chosenYear), CallbackData: fmt.Sprintf("%s%s", types.CallbackDeadlineShow, types.DeadlineShowYears)},
 	})
 	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
-		{Text: chosenMonth.String(), CallbackData: fmt.Sprintf("%s%d", types.CallbackDeadlineShowMonths, chosenMonth)},
+		{Text: chosenMonth.String(), CallbackData: fmt.Sprintf("%s%s", types.CallbackDeadlineShow, types.DeadlineShowMonths)},
 	})
 	weekDayNames := []string{"пн", "вт", "ср", "чт", "пт", "сб", "вс"}
 	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
@@ -189,9 +232,15 @@ func CreateCalendarButtons(chosenYear, chosenMonthNumber, day int) [][]gotgbot.I
 		}
 	}
 	for i := 1; i <= daysInMonth; i++ {
+		var dayStr string
+		if i == chosenDay {
+			dayStr = fmt.Sprintf("~%d~", i)
+		} else {
+			dayStr = fmt.Sprintf("%d", i)
+		}
 		weekButtons = append(weekButtons, gotgbot.InlineKeyboardButton{
-			Text:         fmt.Sprintf("%d", i),
-			CallbackData: fmt.Sprintf("%sday:%d-month:%d-year:%d", types.CallbackDeadlineChoose, i, chosenMonth, chosenYear),
+			Text:         dayStr,
+			CallbackData: fmt.Sprintf("%s%d", types.CallbackDeadlineChooseDay, i),
 		})
 		if len(weekButtons) == 7 {
 			buttons = append(buttons, weekButtons)
@@ -208,59 +257,119 @@ func CreateCalendarButtons(chosenYear, chosenMonthNumber, day int) [][]gotgbot.I
 			buttons = append(buttons, weekButtons)
 		}
 	}
+	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
+		{Text: fmt.Sprintf("%d", chosenHour), CallbackData: fmt.Sprintf("%s%s", types.CallbackDeadlineShow, types.DeadlineShowHours)},
+		{Text: fmt.Sprintf("%d", chosenMinute), CallbackData: fmt.Sprintf("%s%s", types.CallbackDeadlineShow, types.DeadlineShowMinutes)},
+	})
+	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
+		{Text: "Завершить установку сроков", CallbackData: types.CallbackTaskSetDeadlineDone},
+	})
 	return buttons
 }
 
 func CreateYearsButtons(chosenYear int) [][]gotgbot.InlineKeyboardButton {
 	var buttons [][]gotgbot.InlineKeyboardButton
 	var yearRow []gotgbot.InlineKeyboardButton
-	for i := chosenYear - 7; i < chosenYear-2; i++ {
+
+	for i := chosenYear - 7; i <= chosenYear+7; i++ {
+		var yearStr string
+		if i == chosenYear {
+			yearStr = fmt.Sprintf("~%d~", i)
+		} else {
+			yearStr = fmt.Sprintf("%d", i)
+		}
 		yearRow = append(yearRow, gotgbot.InlineKeyboardButton{
-			Text:         fmt.Sprintf("%d", i),
+			Text:         yearStr,
 			CallbackData: fmt.Sprintf("%s%d", types.CallbackDeadlineChooseYear, i),
 		})
+		if len(yearRow) == 5 {
+			buttons = append(buttons, yearRow)
+			yearRow = nil
+		}
 	}
-	buttons = append(buttons, yearRow)
-	yearRow = nil
-	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
-		{Text: fmt.Sprintf("%d", chosenYear-2), CallbackData: fmt.Sprintf("%s%d", types.CallbackDeadlineChooseYear, chosenYear-2)},
-		{Text: fmt.Sprintf("%d", chosenYear-1), CallbackData: fmt.Sprintf("%s%d", types.CallbackDeadlineChooseYear, chosenYear-1)},
-		{Text: fmt.Sprintf("%d", chosenYear), CallbackData: fmt.Sprintf("%s%d", types.CallbackDeadlineChooseYear, chosenYear)},
-		{Text: fmt.Sprintf("%d", chosenYear+1), CallbackData: fmt.Sprintf("%s%d", types.CallbackDeadlineChooseYear, chosenYear+1)},
-		{Text: fmt.Sprintf("%d", chosenYear+2), CallbackData: fmt.Sprintf("%s%d", types.CallbackDeadlineChooseYear, chosenYear+2)},
-	})
-	for i := chosenYear + 3; i <= chosenYear+7; i++ {
-		yearRow = append(yearRow, gotgbot.InlineKeyboardButton{
-			Text:         fmt.Sprintf("%d", i),
-			CallbackData: fmt.Sprintf("%s%d", types.CallbackDeadlineChooseYear, i),
-		})
-	}
-	buttons = append(buttons, yearRow)
 	return buttons
 }
 
 func CreateMonthsButtons(chosenMonth int) [][]gotgbot.InlineKeyboardButton {
+	type MonthStruct struct {
+		Name   string
+		Number int
+	}
+	months := []MonthStruct{
+		{Name: "Январь", Number: 1},
+		{Name: "Февраль", Number: 2},
+		{Name: "Март", Number: 3},
+		{Name: "Апрель", Number: 4},
+		{Name: "Май", Number: 5},
+		{Name: "Июнь", Number: 6},
+		{Name: "Июль", Number: 7},
+		{Name: "Август", Number: 8},
+		{Name: "Сентябрь", Number: 9},
+		{Name: "Октябрь", Number: 10},
+		{Name: "Ноябрь", Number: 11},
+		{Name: "Декабрь", Number: 12},
+	}
 	var buttons [][]gotgbot.InlineKeyboardButton
-	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
-		{Text: "Январь", CallbackData: fmt.Sprintf("%s%d", types.CallbackDeadlineChooseMonth, 1)},
-		{Text: "Февраль", CallbackData: fmt.Sprintf("%s%d", types.CallbackDeadlineChooseMonth, 2)},
-		{Text: "Март", CallbackData: fmt.Sprintf("%s%d", types.CallbackDeadlineChooseMonth, 3)},
-	})
-	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
-		{Text: "Апрель", CallbackData: fmt.Sprintf("%s%d", types.CallbackDeadlineChooseMonth, 4)},
-		{Text: "Май", CallbackData: fmt.Sprintf("%s%d", types.CallbackDeadlineChooseMonth, 5)},
-		{Text: "Июнь", CallbackData: fmt.Sprintf("%s%d", types.CallbackDeadlineChooseMonth, 6)},
-	})
-	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
-		{Text: "Июль", CallbackData: fmt.Sprintf("%s%d", types.CallbackDeadlineChooseMonth, 7)},
-		{Text: "Август", CallbackData: fmt.Sprintf("%s%d", types.CallbackDeadlineChooseMonth, 8)},
-		{Text: "Сентябрь", CallbackData: fmt.Sprintf("%s%d", types.CallbackDeadlineChooseMonth, 9)},
-	})
-	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
-		{Text: "Октябрь", CallbackData: fmt.Sprintf("%s%d", types.CallbackDeadlineChooseMonth, 10)},
-		{Text: "Ноябрь", CallbackData: fmt.Sprintf("%s%d", types.CallbackDeadlineChooseMonth, 11)},
-		{Text: "Декабрь", CallbackData: fmt.Sprintf("%s%d", types.CallbackDeadlineChooseMonth, 12)},
-	})
+	var buttonRow []gotgbot.InlineKeyboardButton
+	for _, month := range months {
+		var monthStr string
+		if month.Number == chosenMonth {
+			monthStr = fmt.Sprintf("~%s~", month.Name)
+		} else {
+			monthStr = fmt.Sprintf("%s", month.Name)
+		}
+		buttonRow = append(buttonRow, gotgbot.InlineKeyboardButton{
+			Text: monthStr, CallbackData: fmt.Sprintf("%s%d", types.CallbackDeadlineChooseMonth, month.Number),
+		})
+		if len(buttonRow) == 3 {
+			buttons = append(buttons, buttonRow)
+			buttonRow = nil
+		}
+	}
+	return buttons
+}
+
+func CreateHoursButtons(chosenHour int) [][]gotgbot.InlineKeyboardButton {
+	var buttons [][]gotgbot.InlineKeyboardButton
+	var buttonRow []gotgbot.InlineKeyboardButton
+	for i := 0; i < 25; i++ {
+		var hourStr string
+		if i == chosenHour {
+			hourStr = fmt.Sprintf("~%d~", i)
+		} else {
+			hourStr = fmt.Sprintf("%d", i)
+		}
+		buttonRow = append(buttonRow, gotgbot.InlineKeyboardButton{
+			Text:         hourStr,
+			CallbackData: fmt.Sprintf("%s%d", types.CallbackDeadlineChooseHour, i),
+		})
+		if len(buttonRow) == 4 {
+			buttons = append(buttons, buttonRow)
+			buttonRow = nil
+		}
+	}
+	return buttons
+}
+
+func CreateMinutesButtons(chosenMinute int) [][]gotgbot.InlineKeyboardButton {
+	var buttons [][]gotgbot.InlineKeyboardButton
+	var buttonRow []gotgbot.InlineKeyboardButton
+	for i := 0; i < 60; i++ {
+		var minuteStr string
+		if i == chosenMinute {
+			minuteStr = fmt.Sprintf("~%d~", i)
+		} else {
+			minuteStr = fmt.Sprintf("%d", i)
+		}
+		buttonRow = append(buttonRow, gotgbot.InlineKeyboardButton{
+			Text:         minuteStr,
+			CallbackData: fmt.Sprintf("%s%d", types.CallbackDeadlineChooseMinute, i),
+		})
+		if len(buttonRow) == 6 {
+			buttons = append(buttons, buttonRow)
+			buttonRow = nil
+		}
+	}
 	return buttons
 }
 

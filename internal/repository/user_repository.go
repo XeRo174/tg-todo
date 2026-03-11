@@ -21,3 +21,7 @@ func (r *Repository) GetUserByTGId(tgId int64) (types.UserModel, error) {
 	}
 	return user, nil
 }
+
+func (r *Repository) UpdateUser(user types.UserModel) error {
+	return r.Database.Model(types.UserModel{}).Where("id = ?", user.ID).Updates(user).Error
+}

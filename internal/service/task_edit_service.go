@@ -177,7 +177,7 @@ func (s *Service) ConversationEditTaskSetPriority(b *gotgbot.Bot, ctx *ext.Conte
 	if err = s.Repository.UpdateTask(task); err != nil {
 		return fmt.Errorf("обновление приоритета задачи: %w", err)
 	}
-	if err = s.GenerateTaskDeadlineMessage(b, ctx.EffectiveSender.ChatId, messageRegister, task, task.Deadline.Year(), int(task.Deadline.Month()), task.Deadline.Day(), "Редактирование задачи", types.ConversationTaskEditSetTheme); err != nil {
+	if err = s.GenerateTaskDeadlineMessage(b, ctx.EffectiveSender.ChatId, messageRegister, task, task.Deadline, "Редактирование задачи", types.ConversationTaskEditSetTheme); err != nil {
 		return err
 	}
 	return handlers.NextConversationState(types.ConversationTaskEditSetDeadline)
@@ -199,7 +199,7 @@ func (s *Service) ConversationEditTaskSetDeadline(b *gotgbot.Bot, ctx *ext.Conte
 	}
 	messageRegister := user.Messages[0]
 	task := messageRegister.Task
-	callQueryValue := strings.Replace(callQuery.Data, types.CallbackDeadlineChoose, "", 1)
+	callQueryValue := strings.Replace(callQuery.Data, types.CallbackTaskSetDeadlineDone, "", 1)
 	deadlineValues := strings.Split(callQueryValue, "-")
 	var day, month, year int
 	for _, deadlineValue := range deadlineValues {

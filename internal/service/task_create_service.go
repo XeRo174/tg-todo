@@ -30,9 +30,10 @@ func (s *Service) ConversationCreateTaskInit(b *gotgbot.Bot, ctx *ext.Context) e
 		return fmt.Errorf("получение задач: %w", err)
 	}
 	newTask := types.TaskModel{
-		Name:   fmt.Sprintf("Задача №%d", len(tasks)+1),
-		User:   user,
-		Status: types.TaskStatusDraft,
+		Name:     fmt.Sprintf("Задача №%d", len(tasks)+1),
+		User:     user,
+		Status:   types.TaskStatusDraft,
+		Deadline: time.Now(),
 	}
 	createdTask, err := s.Repository.CreateTask(newTask)
 	if err != nil {
@@ -107,7 +108,7 @@ func (s *Service) ConversationCreateTaskSetPriority(b *gotgbot.Bot, ctx *ext.Con
 	if err = s.Repository.UpdateTask(task); err != nil {
 		return fmt.Errorf("обновление приоритета задачи: %w", err)
 	}
-	if err = s.GenerateTaskDeadlineMessage(b, ctx.EffectiveSender.ChatId, messageRegister, task, time.Now().Year(), int(time.Now().Month()), time.Now().Day(), "Создание задачи", types.ConversationTaskCreateSetTheme); err != nil {
+	if err = s.GenerateTaskDeadlineMessage(b, ctx.EffectiveSender.ChatId, messageRegister, task, task.Deadline, "Создание задачи", types.ConversationTaskCreateSetTheme); err != nil {
 		return err
 	}
 	return handlers.NextConversationState(types.ConversationTaskCreateSetDeadline)
@@ -129,9 +130,9 @@ func (s *Service) ConversationCreateTaskSetDeadline(b *gotgbot.Bot, ctx *ext.Con
 	}
 	messageRegister := user.Messages[0]
 	task := messageRegister.Task
-	callQueryValue := strings.Replace(callQuery.Data, types.CallbackDeadlineChoose, "", 1)
+	callQueryValue := strings.Replace(callQuery.Data, types.CallbackTaskSetDeadlineDone, "", 1)
 	deadlineValues := strings.Split(callQueryValue, "-")
-	var day, month, year int
+	var day, month, year, hour, minute int
 	for _, deadlineValue := range deadlineValues {
 		if strings.HasPrefix(deadlineValue, "day:") {
 			dayStr := strings.Replace(deadlineValue, "day:", "", 1)
@@ -154,9 +155,23 @@ func (s *Service) ConversationCreateTaskSetDeadline(b *gotgbot.Bot, ctx *ext.Con
 				return fmt.Errorf("получение года из клавиатуры: %w", err)
 			}
 		}
+		if strings.HasPrefix(deadlineValue, "hour:") {
+			hourStr := strings.Replace(deadlineValue, "hour:", "", 1)
+			hour, err = strconv.Atoi(hourStr)
+			if err != nil {
+				return fmt.Errorf("получение часа из клавиатуры: %w", err)
+			}
+		}
+		if strings.HasPrefix(deadlineValue, "minute:") {
+			minuteStr := strings.Replace(deadlineValue, "minute:", "", 1)
+			minute, err = strconv.Atoi(minuteStr)
+			if err != nil {
+				return fmt.Errorf("получение минут из клавиатуры: %w", err)
+			}
+		}
 	}
 	//time.Utc заменить на user.Timezone
-	deadline := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC)
+	deadline := time.Date(year, time.Month(month), day, hour, minute, 0, 0, time.UTC)
 	task.Deadline = deadline
 	if err = s.Repository.UpdateTask(task); err != nil {
 		return fmt.Errorf("обновление сроков задачи: %w", err)

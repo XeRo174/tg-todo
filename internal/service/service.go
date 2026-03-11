@@ -10,9 +10,11 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers/filters/callbackquery"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers/filters/message"
 	"github.com/sirupsen/logrus"
+	"strings"
 	"tg-todo/internal/bootstrap"
 	"tg-todo/internal/repository"
 	"tg-todo/internal/types"
+	"tg-todo/internal/utils"
 	"time"
 )
 
@@ -70,6 +72,20 @@ func (s *Service) Start() {
 	dispatcher.AddHandler(cancelCommand)
 	dispatcher.AddHandler(handlers.NewCommand("get_themes", s.CommandGetThemes))
 	dispatcher.AddHandler(handlers.NewCommand("get_tasks", s.CommandGetTasks))
+	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Equal(types.CallbackEmpty), s.CallbackEmpty))
+
+	dispatcher.AddHandler(handlers.NewConversation(
+		[]ext.Handler{handlers.NewCommand(types.CommandUserTimezoneEdit, s.CommandUserTimezoneHandler)},
+		map[string][]ext.Handler{
+			types.ConversationUserEditChooseTimezone: {
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackUserSetTimezone), s.CallbackUserTimezoneChoose),
+			},
+		}, &handlers.ConversationOpts{
+			Exits:        []ext.Handler{cancelCommand},
+			AllowReEntry: true,
+			StateStorage: conversation.NewInMemoryStorage(conversation.KeyStrategySenderAndChat),
+		},
+	))
 
 	//Разговор создания новой темы
 	dispatcher.AddHandler(handlers.NewConversation(
@@ -112,13 +128,19 @@ func (s *Service) Start() {
 			types.ConversationTaskCreateSetDeadline: {
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.CallbackTaskFieldSkip),
 
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineShowYears), s.CallbackTaskDeadlineShowYears),
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineShow), s.CallbackDeadlineShowChoose),
+
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineChooseYear), s.CallbackTaskDeadlineChooseYear),
 
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineShowMonths), s.CallbackTaskDeadlineShowMonths),
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineChooseMonth), s.CallbackTaskDeadlineChooseMonth),
 
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineChoose), s.ConversationCreateTaskSetDeadline),
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineChooseDay), s.CallbackTaskDeadlineChooseDay),
+
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineChooseHour), s.CallbackTaskDeadlineChooseHour),
+
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineChooseMinute), s.CallbackTaskDeadlineChooseMinute),
+
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskSetDeadlineDone), s.CallbackTaskDoneDeadline),
 			},
 			types.ConversationTaskCreateSetTheme: {
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskSetTheme), s.ConversationCreateTaskSetTheme),
@@ -156,13 +178,20 @@ func (s *Service) Start() {
 			types.ConversationTaskEditSetDeadline: {
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.CallbackTaskFieldSkip),
 
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineShowYears), s.CallbackTaskDeadlineShowYears),
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineShow), s.CallbackDeadlineShowChoose),
+
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineChooseYear), s.CallbackTaskDeadlineChooseYear),
 
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineShowMonths), s.CallbackTaskDeadlineShowMonths),
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineChooseMonth), s.CallbackTaskDeadlineChooseMonth),
 
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineChoose), s.ConversationEditTaskSetDeadline),
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineChooseDay), s.CallbackTaskDeadlineChooseDay),
+
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineChooseHour), s.CallbackTaskDeadlineChooseHour),
+
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineChooseMinute), s.CallbackTaskDeadlineChooseMinute),
+
+				handlers.NewCallback(callbackquery.Equal(types.CallbackTaskSetDeadlineDone), s.CallbackTaskDoneDeadline),
+				//handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineChoose), s.ConversationEditTaskSetDeadline),
 			},
 			types.ConversationTaskEditSetTheme: {
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskSetTheme), s.ConversationEditTaskSetTheme),
@@ -217,12 +246,72 @@ func (s *Service) CommandStartHandler(b *gotgbot.Bot, ctx *ext.Context) error {
 	return nil
 }
 
+func (s *Service) CommandUserTimezoneHandler(b *gotgbot.Bot, ctx *ext.Context) error {
+	userTGId := ctx.EffectiveSender.User.Id
+	user, err := s.Repository.GetUserByTGId(userTGId)
+	if err != nil {
+		return fmt.Errorf("%s: %w", types.ErrorStrokeFindUserByTG, err)
+	}
+	timezoneMessage, err := b.SendMessage(ctx.EffectiveSender.ChatId, "Установка часовой зоны пользователя", &gotgbot.SendMessageOpts{
+		ReplyMarkup: gotgbot.InlineKeyboardMarkup{
+			InlineKeyboard: utils.TimezonesInlineKeyboard(),
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("отправка сообщения часовых зон: %w", err)
+	}
+	if err = s.Repository.UpsertMessageRegister(types.MessageRegisterModel{
+		UserId:       user.ID,
+		BotMessageId: timezoneMessage.MessageId,
+		Operation:    types.MessageRegisterOperationUserEdit,
+	}); err != nil {
+		return fmt.Errorf("запись сообщения редактирования пользователя: %w", err)
+	}
+	return handlers.NextConversationState(types.ConversationUserEditChooseTimezone)
+}
+
+func (s *Service) CallbackUserTimezoneChoose(b *gotgbot.Bot, ctx *ext.Context) error {
+	userTGId := ctx.EffectiveSender.User.Id
+	callQuery := ctx.Update.CallbackQuery
+	if _, err := callQuery.Answer(b, &gotgbot.AnswerCallbackQueryOpts{Text: "Часовая зона выбрана"}); err != nil {
+		return fmt.Errorf("ответ на выбор часовой зоны: %w", err)
+	}
+	user, err := s.Repository.GetUserByTGId(userTGId)
+	if err != nil {
+		return fmt.Errorf("%s: %w", types.ErrorStrokeFindUserByTG, err)
+	}
+	if len(user.Messages) == 0 || user.Messages[0].BotMessageId == 0 {
+		return fmt.Errorf("сообщение создания задачи не найдено")
+	}
+	messageRegister := user.Messages[0]
+	timezoneStr := strings.Replace(callQuery.Data, types.CallbackUserSetTimezone, "", 1)
+	user.TimeZone = timezoneStr
+	if err = s.Repository.UpdateUser(user); err != nil {
+		return fmt.Errorf("обновление часовой зоны пользователя: %w", err)
+	}
+	if _, _, err = b.EditMessageText(fmt.Sprintf("Установка часовой зоны пользователя завершена, выбрана зона '%s'", timezoneStr), &gotgbot.EditMessageTextOpts{
+		MessageId: messageRegister.BotMessageId,
+		ChatId:    ctx.EffectiveSender.ChatId,
+	}); err != nil {
+		return fmt.Errorf("изменение сообщения пользователя, установка часовой зоны завершена: %w", err)
+	}
+	return handlers.EndConversation()
+}
+
 // CommandCancelHandler - обработчик отмены действий/разговора
 func (s *Service) CommandCancelHandler(b *gotgbot.Bot, ctx *ext.Context) error {
 	if _, err := b.SendMessage(ctx.EffectiveSender.ChatId, "Разговор завершен", nil); err != nil {
 		return fmt.Errorf("отправка сообщения отмены: %w", err)
 	}
 	return handlers.EndConversation()
+}
+
+func (s *Service) CallbackEmpty(b *gotgbot.Bot, ctx *ext.Context) error {
+	callQuery := ctx.Update.CallbackQuery
+	if _, err := callQuery.Answer(b, nil); err != nil {
+		return fmt.Errorf("ответ на выбор пустого обработчика: %w", err)
+	}
+	return nil
 }
 
 // CommandCommonValue - обработчик команды записи базовых тем
