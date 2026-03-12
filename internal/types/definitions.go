@@ -12,20 +12,31 @@ const (
 	ConversationThemeEditChooseTheme = "conversation_theme_edit_choose_theme"
 	ConversationThemeEditSetName     = "conversation_theme_edit_set_name"
 
+	ConversationThemeInit         = "conversation_theme_init"
+	ConversationThemeChoose       = "conversation_theme_choose"
+	ConversationThemeActionChoose = "conversation_theme_action_choose"
+
+	ConversationThemeDelete = "conversation_theme_delete"
+
+	ConversationTaskInit         = "conversation_task_init"
+	ConversationTaskChoose       = "conversation_task_choose"
+	ConversationTaskActionChoose = "conversation_task_action_choose"
+
+	ConversationTaskEditSetName     = "conversation_task_edit_set_name"
+	ConversationTaskEditSetPriority = "conversation_task_edit_set_priority"
+	ConversationTaskEditSetDeadline = "conversation_task_edit_set_deadline"
+	ConversationTaskEditSetTheme    = "conversation_task_edit_set_theme"
+
+	ConversationTaskSetStatus = "conversation_task_set_status"
+
+	ConversationTaskDelete = "conversation_task_delete"
+
 	ConversationTaskCreateInit         = "conversation_task_create_init"
 	ConversationTaskCreateSetName      = "conversation_task_create_set_name"
 	ConversationTaskCreateSetPriority  = "conversation_task_create_set_priority"
 	ConversationTaskCreateSetDeadline  = "conversation_task_create_set_deadline"
 	ConversationTaskCreateSetTheme     = "conversation_task_create_set_theme"
 	ConversationTaskCreateSetThemeDone = "conversation_task_create_set_theme_done"
-
-	ConversationTaskEditInit         = "conversation_task_edit_init"
-	ConversationTaskEditChooseTask   = "conversation_task_edit_choose_task"
-	ConversationTaskEditSetName      = "conversation_task_edit_set_name"
-	ConversationTaskEditSetPriority  = "conversation_task_edit_set_priority"
-	ConversationTaskEditSetDeadline  = "conversation_task_edit_set_deadline"
-	ConversationTaskEditSetTheme     = "conversation_task_edit_set_theme"
-	ConversationTaskEditSetThemeDone = "conversation_task_edit_set_theme_done"
 )
 
 // Список констант определяющих ключи callback
@@ -44,6 +55,12 @@ const (
 	CallbackTaskComplete = "task_complete"
 	// CallbackTaskStop - прекращение работы с задачей
 	CallbackTaskStop = "task_stop"
+
+	// CallbackTaskAction - действие которое надо произвести с задачей
+	CallbackTaskAction = "task_action:"
+
+	// CallbackThemeAction - действие которое надо произвести с темой
+	CallbackThemeAction = "theme_action:"
 
 	// CallbackTaskPrioritySet - установка приоритета задачи
 	CallbackTaskPrioritySet = "set_task_priority:"
@@ -84,24 +101,35 @@ const (
 // Список констант определяющих команды
 const (
 	CommandThemeCreateInit  = "create_theme"
-	CommandThemeEditInit    = "edit_theme"
+	CommandTasksGet         = "tasks"
+	CommandThemesGet        = "themes"
 	CommandTaskCreateInit   = "create_task"
-	CommandTaskEditInit     = "edit_task"
 	CommandUserTimezoneEdit = "edit_user"
 )
 
 const (
-	TimeLayout        = "2006-01-02 15:04:05"
+	TimeLayout        = "2006-01-02 15:04"
 	ThemeKeyboardSize = 3
 	UnlimitedSize     = -1
 
+	MessageRegisterOperationTask  = "task"
+	MessageRegisterOperationTheme = "theme"
+
 	MessageRegisterOperationTaskCreate = "create_task"
 	MessageRegisterOperationTaskEdit   = "edit_task"
+	MessageRegisterOperationTaskStatus = "status_task"
+	MessageRegisterOperationTaskDelete = "delete_task"
 
 	MessageRegisterOperationThemeCreate = "create_theme"
 	MessageRegisterOperationThemeEdit   = "edit_theme"
+	MessageRegisterOperationThemeDelete = "delete_theme"
 
 	MessageRegisterOperationUserEdit = "edit_user"
+
+	ActionEdit   = "action_edit"
+	ActionStatus = "action_status"
+	ActionDelete = "action_delete"
+	ActionBack   = "action_back"
 
 	DeadlineShowYears   = "years"
 	DeadlineShowMonths  = "months"

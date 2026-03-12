@@ -10,11 +10,9 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers/filters/callbackquery"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers/filters/message"
 	"github.com/sirupsen/logrus"
-	"strings"
 	"tg-todo/internal/bootstrap"
 	"tg-todo/internal/repository"
 	"tg-todo/internal/types"
-	"tg-todo/internal/utils"
 	"time"
 )
 
@@ -32,8 +30,6 @@ func NewService(r *repository.Repository, bot *gotgbot.Bot, app bootstrap.Applic
 	}
 }
 
-//todo - поиск удобной версии установки сроков задача. Текущая вариант не удобен и только выполняет свое предназначение. Нужен виджет/команда/кнопки где будет более подходящий способ установки сроков задач.
-
 //todo - возможность пропускать ненужные параметры для задачи.
 
 //todo - редактирование тем и задач.
@@ -41,8 +37,6 @@ func NewService(r *repository.Repository, bot *gotgbot.Bot, app bootstrap.Applic
 //todo - уменьшение количества отдельных сообщений. При создании задачи, отправляется слишком много отдельных сообщений-вопросов. Решение - в идеале, после получения /create_task отправляется одно сообщение, которое будет последовательно редактироваться дополняясь новыми данными.
 // Примерный вид "Создание новой задачи\nИмя задачи: Купить учебник по sql\nСроки выполнения: 04.03.2026\n\n\nВведите приоритет задачи"
 // Под сообщением будет ряд кнопок: Создать - завершить создание с текущими данными; Редактировать - появляются кнопки каждого поля, после нажатия надо ввести-выбрать новое значение и процесс продолжается; Отменить - черновик задачи удалятся из базы, процесс завершен. В зависимости будут показываться и скрываться разные кнопки.
-
-//todo - отметка статуса задачи. Пользователь может отметить задачу выполненной, может установить её как заброшенную и тому подобные статусы. По умолчанию будет ставится статус в работе или подобный.
 
 //todo - менеджер уведомления задач. Для уведомления пользователя о сроках задачи нужен Менеджер работающий в отдельном потоке (goroutine). Он будет периодически обращаться к бд и получать все не выполненные задачи.
 // Также нужно поле у Задачи, отвечающее за количество уведомлений, в нем будет считаться за какое время было уведомление, за день, за час, за 10 минут. (Условный пример). Если остался час до окончания задачи и подобное сообщение не было прежде отправлено, то Менеджер подает отправляет сообщение пользователю.
@@ -70,8 +64,6 @@ func (s *Service) Start() {
 	dispatcher.AddHandler(handlers.NewCommand("start", s.CommandStartHandler))
 	dispatcher.AddHandler(handlers.NewCommand("common", s.CommandCommonValue))
 	dispatcher.AddHandler(cancelCommand)
-	dispatcher.AddHandler(handlers.NewCommand("get_themes", s.CommandGetThemes))
-	dispatcher.AddHandler(handlers.NewCommand("get_tasks", s.CommandGetTasks))
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Equal(types.CallbackEmpty), s.CallbackEmpty))
 
 	dispatcher.AddHandler(handlers.NewConversation(
@@ -97,22 +89,94 @@ func (s *Service) Start() {
 			AllowReEntry: true,
 			StateStorage: conversation.NewInMemoryStorage(conversation.KeyStrategySenderAndChat),
 		}))
-	//Разговор редактирования темы
+
 	dispatcher.AddHandler(handlers.NewConversation(
-		[]ext.Handler{handlers.NewCommand(types.CommandThemeEditInit, s.ConversationEditThemeInit)},
+		[]ext.Handler{handlers.NewCommand(types.CommandThemesGet, s.ConversationThemesInit)},
 		map[string][]ext.Handler{
-			types.ConversationThemeEditChooseTheme: {
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackThemeChoose), s.ConversationEditThemeChoseTheme),
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackChangePage), s.ConversationEditThemeChangeThemesPage),
+			types.ConversationThemeChoose: {
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackThemeChoose), s.ConversationThemeChose),
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackChangePage), s.CallbackThemeChangeThemesPage),
 			},
-			types.ConversationThemeEditSetName: {handlers.NewMessage(noCommand, s.ConversationEditThemeSetName)},
+			types.ConversationThemeActionChoose: {
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackThemeAction), s.ConversationChoseThemeAction),
+			},
+			types.ConversationThemeEditSetName: {
+				handlers.NewMessage(noCommand, s.ConversationEditThemeSetName),
+			},
+			types.ConversationThemeDelete: {},
 		},
 		&handlers.ConversationOpts{
 			Exits:        []ext.Handler{cancelCommand},
 			AllowReEntry: true,
 			StateStorage: conversation.NewInMemoryStorage(conversation.KeyStrategySenderAndChat),
+		}))
+
+	dispatcher.AddHandler(handlers.NewConversation(
+		[]ext.Handler{handlers.NewCommand(types.CommandTasksGet, s.ConversationTasksInit)},
+		map[string][]ext.Handler{
+			types.ConversationTaskChoose: {
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskChoose), s.ConversationTaskChoose),
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackChangePage), s.CallbackTaskChangeTasksPage),
+			},
+			types.ConversationTaskActionChoose: {
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskAction), s.ConversationChooseTaskAction),
+			},
+			//Работа по изменению задачи
+			types.ConversationTaskEditSetName: {
+				handlers.NewMessage(noCommand, s.ConversationEditTaskSetName),
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.CallbackTaskFieldSkip),
+			},
+			types.ConversationTaskEditSetPriority: {
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskPrioritySet), s.ConversationEditTaskSetPriority),
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.CallbackTaskFieldSkip),
+			},
+			types.ConversationTaskEditSetDeadline: {
+				//Показать клавиатуру выбора срока
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineShow), s.CallbackDeadlineShowChoose),
+				//Выбрать год
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineChooseYear), s.CallbackTaskDeadlineChooseYear),
+				//Выбрать месяц
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineChooseMonth), s.CallbackTaskDeadlineChooseMonth),
+				//Выбрать день
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineChooseDay), s.CallbackTaskDeadlineChooseDay),
+				//Выбрать час
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineChooseHour), s.CallbackTaskDeadlineChooseHour),
+				//Выбрать минуты
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineChooseMinute), s.CallbackTaskDeadlineChooseMinute),
+				//Завершить выбор
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskSetDeadlineDone), s.CallbackTaskDoneDeadline),
+				//Пропуск поля
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.CallbackTaskFieldSkip),
+			},
+			types.ConversationTaskEditSetTheme: {
+				//Установка темы для задачи
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskSetTheme), s.ConversationEditTaskSetTheme),
+				//Удаление темы для задачи
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskUnsetTheme), s.ConversationEditTaskUnsetTheme),
+				//Завершение выбора тем
+				handlers.NewCallback(callbackquery.Equal(types.CallbackTaskSetThemeDone), s.CallbackTaskDoneTheme),
+				//Смена страницы тем
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackChangePage), s.CallbackTaskChangeThemesPage),
+			},
+
+			//Работа по установки статуса задачи
+			types.ConversationTaskSetStatus: {
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskStatusSet), s.ConversationTaskStatusSet),
+			},
+
+			//Работа по удалению задачи
+			types.ConversationTaskDelete: {},
 		},
-	))
+		&handlers.ConversationOpts{
+			Exits: []ext.Handler{
+				cancelCommand,
+				handlers.NewCallback(callbackquery.Equal(types.CallbackTaskComplete), s.CallbackTaskDone),
+				handlers.NewCallback(callbackquery.Equal(types.CallbackTaskStop), s.CallbackTaskCancel),
+			},
+			AllowReEntry: true,
+			StateStorage: conversation.NewInMemoryStorage(conversation.KeyStrategySenderAndChat),
+		}))
+
 	//Разговор создания новой задачи
 	dispatcher.AddHandler(handlers.NewConversation(
 		[]ext.Handler{handlers.NewCommand(types.CommandTaskCreateInit, s.ConversationCreateTaskInit)},
@@ -126,7 +190,6 @@ func (s *Service) Start() {
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.CallbackTaskFieldSkip),
 			},
 			types.ConversationTaskCreateSetDeadline: {
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.CallbackTaskFieldSkip),
 
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineShow), s.CallbackDeadlineShowChoose),
 
@@ -141,13 +204,14 @@ func (s *Service) Start() {
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineChooseMinute), s.CallbackTaskDeadlineChooseMinute),
 
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskSetDeadlineDone), s.CallbackTaskDoneDeadline),
+
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.CallbackTaskFieldSkip),
 			},
 			types.ConversationTaskCreateSetTheme: {
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskSetTheme), s.ConversationCreateTaskSetTheme),
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskUnsetTheme), s.ConversationCreateTaskUnsetTheme),
 				handlers.NewCallback(callbackquery.Equal(types.CallbackTaskSetThemeDone), s.CallbackTaskDoneTheme),
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackChangePage), s.CallbackTaskChangeThemesPage),
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.CallbackTaskFieldSkip),
 			},
 		},
 		&handlers.ConversationOpts{
@@ -155,57 +219,6 @@ func (s *Service) Start() {
 				cancelCommand,
 				handlers.NewCallback(callbackquery.Equal(types.CallbackTaskComplete), s.CallbackTaskDone),
 				handlers.NewCallback(callbackquery.Equal(types.CallbackTaskStop), s.CallbackTaskCancel),
-			},
-			AllowReEntry: true,
-			StateStorage: conversation.NewInMemoryStorage(conversation.KeyStrategySenderAndChat),
-		}))
-	//Разговор редактирования задачи
-	dispatcher.AddHandler(handlers.NewConversation(
-		[]ext.Handler{handlers.NewCommand(types.CommandTaskEditInit, s.ConversationEditTaskInit)},
-		map[string][]ext.Handler{
-			types.ConversationTaskEditChooseTask: {
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskChoose), s.ConversationEditTaskChooseTask),
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackChangePage), s.CallbackTaskChangeTasksPage),
-			},
-			types.ConversationTaskEditSetName: {
-				handlers.NewMessage(noCommand, s.ConversationEditTaskSetName),
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.CallbackTaskFieldSkip),
-			},
-			types.ConversationTaskEditSetPriority: {
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskPrioritySet), s.ConversationEditTaskSetPriority),
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.CallbackTaskFieldSkip),
-			},
-			types.ConversationTaskEditSetDeadline: {
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.CallbackTaskFieldSkip),
-
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineShow), s.CallbackDeadlineShowChoose),
-
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineChooseYear), s.CallbackTaskDeadlineChooseYear),
-
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineChooseMonth), s.CallbackTaskDeadlineChooseMonth),
-
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineChooseDay), s.CallbackTaskDeadlineChooseDay),
-
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineChooseHour), s.CallbackTaskDeadlineChooseHour),
-
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineChooseMinute), s.CallbackTaskDeadlineChooseMinute),
-
-				handlers.NewCallback(callbackquery.Equal(types.CallbackTaskSetDeadlineDone), s.CallbackTaskDoneDeadline),
-				//handlers.NewCallback(callbackquery.Prefix(types.CallbackDeadlineChoose), s.ConversationEditTaskSetDeadline),
-			},
-			types.ConversationTaskEditSetTheme: {
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskSetTheme), s.ConversationEditTaskSetTheme),
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskUnsetTheme), s.ConversationEditTaskUnsetTheme),
-				handlers.NewCallback(callbackquery.Equal(types.CallbackTaskSetThemeDone), s.CallbackTaskDoneTheme),
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackChangePage), s.CallbackTaskChangeThemesPage),
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskFieldSkip), s.CallbackTaskFieldSkip),
-			},
-		},
-		&handlers.ConversationOpts{
-			Exits: []ext.Handler{
-				cancelCommand,
-				handlers.NewCallback(callbackquery.Equal(types.CallbackTaskComplete), s.CallbackTaskDone),
-				handlers.NewCallback(callbackquery.Equal(types.CallbackTaskStop), s.CallbackTaskCancel), //new
 			},
 			AllowReEntry: true,
 			StateStorage: conversation.NewInMemoryStorage(conversation.KeyStrategySenderAndChat),
@@ -244,58 +257,6 @@ func (s *Service) CommandStartHandler(b *gotgbot.Bot, ctx *ext.Context) error {
 		return fmt.Errorf("установка базовых тем: %w", err)
 	}
 	return nil
-}
-
-func (s *Service) CommandUserTimezoneHandler(b *gotgbot.Bot, ctx *ext.Context) error {
-	userTGId := ctx.EffectiveSender.User.Id
-	user, err := s.Repository.GetUserByTGId(userTGId)
-	if err != nil {
-		return fmt.Errorf("%s: %w", types.ErrorStrokeFindUserByTG, err)
-	}
-	timezoneMessage, err := b.SendMessage(ctx.EffectiveSender.ChatId, "Установка часовой зоны пользователя", &gotgbot.SendMessageOpts{
-		ReplyMarkup: gotgbot.InlineKeyboardMarkup{
-			InlineKeyboard: utils.TimezonesInlineKeyboard(),
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("отправка сообщения часовых зон: %w", err)
-	}
-	if err = s.Repository.UpsertMessageRegister(types.MessageRegisterModel{
-		UserId:       user.ID,
-		BotMessageId: timezoneMessage.MessageId,
-		Operation:    types.MessageRegisterOperationUserEdit,
-	}); err != nil {
-		return fmt.Errorf("запись сообщения редактирования пользователя: %w", err)
-	}
-	return handlers.NextConversationState(types.ConversationUserEditChooseTimezone)
-}
-
-func (s *Service) CallbackUserTimezoneChoose(b *gotgbot.Bot, ctx *ext.Context) error {
-	userTGId := ctx.EffectiveSender.User.Id
-	callQuery := ctx.Update.CallbackQuery
-	if _, err := callQuery.Answer(b, &gotgbot.AnswerCallbackQueryOpts{Text: "Часовая зона выбрана"}); err != nil {
-		return fmt.Errorf("ответ на выбор часовой зоны: %w", err)
-	}
-	user, err := s.Repository.GetUserByTGId(userTGId)
-	if err != nil {
-		return fmt.Errorf("%s: %w", types.ErrorStrokeFindUserByTG, err)
-	}
-	if len(user.Messages) == 0 || user.Messages[0].BotMessageId == 0 {
-		return fmt.Errorf("сообщение создания задачи не найдено")
-	}
-	messageRegister := user.Messages[0]
-	timezoneStr := strings.Replace(callQuery.Data, types.CallbackUserSetTimezone, "", 1)
-	user.TimeZone = timezoneStr
-	if err = s.Repository.UpdateUser(user); err != nil {
-		return fmt.Errorf("обновление часовой зоны пользователя: %w", err)
-	}
-	if _, _, err = b.EditMessageText(fmt.Sprintf("Установка часовой зоны пользователя завершена, выбрана зона '%s'", timezoneStr), &gotgbot.EditMessageTextOpts{
-		MessageId: messageRegister.BotMessageId,
-		ChatId:    ctx.EffectiveSender.ChatId,
-	}); err != nil {
-		return fmt.Errorf("изменение сообщения пользователя, установка часовой зоны завершена: %w", err)
-	}
-	return handlers.EndConversation()
 }
 
 // CommandCancelHandler - обработчик отмены действий/разговора
@@ -371,6 +332,18 @@ func MessageOperationBeauty(messageRegister types.MessageRegisterModel) string {
 		title = "Создание темы прервано"
 	case types.MessageRegisterOperationThemeEdit:
 		title = "Редактирование темы прервано"
+	case types.MessageRegisterOperationUserEdit:
+		title = "Изменение пользователя прервано"
+	case types.MessageRegisterOperationTask:
+		title = "Работа с задачей прервана"
+	case types.MessageRegisterOperationTheme:
+		title = "Работа с темой прервана"
+	case types.MessageRegisterOperationTaskStatus:
+		title = "Установка статуса задачи прервано"
+	case types.MessageRegisterOperationTaskDelete:
+		title = "Удаление задачи прервано"
+	case types.MessageRegisterOperationThemeDelete:
+		title = "Удаление темы прервано"
 	default:
 		title = "Работа прервана"
 	}

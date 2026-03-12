@@ -41,6 +41,7 @@ func Contains(themes []types.ThemeModel, themeId uint) bool {
 	return false
 }
 
+// TimezonesInlineKeyboard - формирует клавиатура выбора часовой зоны пользователя
 func TimezonesInlineKeyboard() [][]gotgbot.InlineKeyboardButton {
 	var buttons [][]gotgbot.InlineKeyboardButton
 	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
@@ -79,6 +80,39 @@ func TimezonesInlineKeyboard() [][]gotgbot.InlineKeyboardButton {
 	return buttons
 }
 
+// ThemeActionButtons - формирует клавиатуры выбора действий с темой
+func ThemeActionButtons(currentPage uint) [][]gotgbot.InlineKeyboardButton {
+	var buttons [][]gotgbot.InlineKeyboardButton
+	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
+		{Text: "Редактировать", CallbackData: fmt.Sprintf("%s%s", types.CallbackThemeAction, types.ActionEdit)},
+	})
+	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
+		{Text: "Удалить", CallbackData: fmt.Sprintf("%s%s", types.CallbackThemeAction, types.ActionDelete)},
+	})
+	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
+		{Text: "Назад", CallbackData: fmt.Sprintf("%s%s;%s%d", types.CallbackThemeAction, types.ActionBack, types.CallbackCurrentPage, currentPage)},
+	})
+	return buttons
+}
+
+// TaskActionButtons - формирует клавиатуру выбора действий с задачей
+func TaskActionButtons(currentPage uint) [][]gotgbot.InlineKeyboardButton {
+	var buttons [][]gotgbot.InlineKeyboardButton
+	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
+		{Text: "Редактировать", CallbackData: fmt.Sprintf("%s%s", types.CallbackTaskAction, types.ActionEdit)},
+	})
+	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
+		{Text: "Установить статус", CallbackData: fmt.Sprintf("%s%s", types.CallbackTaskAction, types.ActionStatus)},
+	})
+	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
+		{Text: "Удалить", CallbackData: fmt.Sprintf("%s%s", types.CallbackTaskAction, types.ActionDelete)},
+	})
+	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
+		{Text: "Назад", CallbackData: fmt.Sprintf("%s%s;%s%d", types.CallbackTaskAction, types.ActionBack, types.CallbackCurrentPage, currentPage)},
+	})
+	return buttons
+}
+
 // TaskInlineKeyboard - формирует клавиатуру работы с задачей
 func TaskInlineKeyboard(nextField string, allowSkip bool) [][]gotgbot.InlineKeyboardButton {
 	var buttons [][]gotgbot.InlineKeyboardButton
@@ -108,12 +142,23 @@ func PriorityButtons() [][]gotgbot.InlineKeyboardButton {
 	return buttons
 }
 
+// StatusButtons - формирует клавиатуру возможных статусов задачи
+func StatusButtons() [][]gotgbot.InlineKeyboardButton {
+	var buttons [][]gotgbot.InlineKeyboardButton
+	for _, status := range types.AllStatuses() {
+		buttons = append(buttons, []gotgbot.InlineKeyboardButton{
+			{Text: status.String(), CallbackData: fmt.Sprintf("%s%d", types.CallbackTaskStatusSet, status)},
+		})
+	}
+	return buttons
+}
+
 // ChooseThemeInlineKeyboard - формирует клавиатуру выбора тем
 func ChooseThemeInlineKeyboard(themesByPage []types.ThemeModel, totalPages, currentPage int) [][]gotgbot.InlineKeyboardButton {
 	var buttons [][]gotgbot.InlineKeyboardButton
 	for _, theme := range themesByPage {
 		buttons = append(buttons, []gotgbot.InlineKeyboardButton{
-			{Text: theme.Name, CallbackData: fmt.Sprintf("%s%d", types.CallbackThemeChoose, theme.ID)},
+			{Text: theme.Name, CallbackData: fmt.Sprintf("%s%d;%s%d", types.CallbackThemeChoose, theme.ID, types.CallbackCurrentPage, currentPage)},
 		})
 	}
 	if totalPages > 1 {
@@ -127,7 +172,7 @@ func ChooseTaskInlineKeyboard(tasksByPage []types.TaskModel, totalPages, current
 	var buttons [][]gotgbot.InlineKeyboardButton
 	for _, task := range tasksByPage {
 		buttons = append(buttons, []gotgbot.InlineKeyboardButton{
-			{Text: task.Name, CallbackData: fmt.Sprintf("%s%d", types.CallbackTaskChoose, task.ID)},
+			{Text: task.Name, CallbackData: fmt.Sprintf("%s%d;%s%d", types.CallbackTaskChoose, task.ID, types.CallbackCurrentPage, currentPage)},
 		})
 	}
 	if totalPages > 1 {
@@ -267,6 +312,7 @@ func CreateCalendarButtons(chosenDate time.Time) [][]gotgbot.InlineKeyboardButto
 	return buttons
 }
 
+// CreateYearsButtons - создание клавиатуры для выбора года
 func CreateYearsButtons(chosenYear int) [][]gotgbot.InlineKeyboardButton {
 	var buttons [][]gotgbot.InlineKeyboardButton
 	var yearRow []gotgbot.InlineKeyboardButton
@@ -290,6 +336,7 @@ func CreateYearsButtons(chosenYear int) [][]gotgbot.InlineKeyboardButton {
 	return buttons
 }
 
+// CreateMonthsButtons - создание клавиатуры для выбора месяца
 func CreateMonthsButtons(chosenMonth int) [][]gotgbot.InlineKeyboardButton {
 	type MonthStruct struct {
 		Name   string
@@ -329,6 +376,7 @@ func CreateMonthsButtons(chosenMonth int) [][]gotgbot.InlineKeyboardButton {
 	return buttons
 }
 
+// CreateHoursButtons - создание клавиатуры для выбора часа
 func CreateHoursButtons(chosenHour int) [][]gotgbot.InlineKeyboardButton {
 	var buttons [][]gotgbot.InlineKeyboardButton
 	var buttonRow []gotgbot.InlineKeyboardButton
@@ -351,6 +399,7 @@ func CreateHoursButtons(chosenHour int) [][]gotgbot.InlineKeyboardButton {
 	return buttons
 }
 
+// CreateMinutesButtons - создание клавиатуры для выбора минуты
 func CreateMinutesButtons(chosenMinute int) [][]gotgbot.InlineKeyboardButton {
 	var buttons [][]gotgbot.InlineKeyboardButton
 	var buttonRow []gotgbot.InlineKeyboardButton
