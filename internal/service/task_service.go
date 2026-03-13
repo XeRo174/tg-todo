@@ -163,6 +163,7 @@ func (s *Service) ConversationChooseTaskAction(b *gotgbot.Bot, ctx *ext.Context)
 		message = TaskMessageFill("Удаление задачи", "Вы точно хотите удалить задачу?", task, task.Themes)
 		conversationState = types.ConversationTaskDelete
 		messageRegister.Operation = types.MessageRegisterOperationTaskDelete
+		keyboard = utils.ConfirmDeleteButtons(int(currentPage))
 	case types.ActionBack:
 		taskFilter := types.TaskFilter{UserTGId: userTGId, SortQuery: types.SortQuery{Size: types.ThemeKeyboardSize, Page: currentPage}}
 		tasks, err := s.Repository.GetTasks(taskFilter)
@@ -208,7 +209,7 @@ func (s *Service) CallbackTaskChangeTasksPage(b *gotgbot.Bot, ctx *ext.Context) 
 	if len(user.Messages) == 0 || user.Messages[0].BotMessageId == 0 {
 		return fmt.Errorf("сообщение редактирования задачи не найдено")
 	}
-	pageStr := strings.Replace(callQuery.Data, types.CallbackChangePage, "", 1)
+	pageStr := strings.Replace(callQuery.Data, types.CallbackChangeTaskPage, "", 1)
 	page, err := strconv.Atoi(pageStr)
 	if err != nil {
 		return fmt.Errorf("получение номера страницы клавиатуры задач: %w", err)
@@ -232,7 +233,79 @@ func (s *Service) CallbackTaskChangeTasksPage(b *gotgbot.Bot, ctx *ext.Context) 
 	}); err != nil {
 		return fmt.Errorf("изменение сообщения задачи, смена страницы клавиатуры задач: %w", err)
 	}
+
 	return nil
+}
+
+func (s *Service) CallbackTaskDeleteConfirm(b *gotgbot.Bot, ctx *ext.Context) error {
+	userTGId := ctx.EffectiveSender.User.Id
+	callQuery := ctx.Update.CallbackQuery
+	if _, err := callQuery.Answer(b, &gotgbot.AnswerCallbackQueryOpts{Text: "Удаление подтверждено"}); err != nil {
+		return fmt.Errorf("ответ на подтверждение удаления: %w", err)
+	}
+	user, err := s.Repository.GetUserByTGId(userTGId)
+	if err != nil {
+		return fmt.Errorf("%s: %w", types.ErrorStrokeFindUserByTG, err)
+	}
+	if len(user.Messages) == 0 || user.Messages[0].BotMessageId == 0 || user.Messages[0].TaskId == 0 {
+		return fmt.Errorf("сообщение редактирования задачи не найдено")
+	}
+	messageRegister := user.Messages[0]
+	if err = s.Repository.DeleteTask(messageRegister.TaskId); err != nil {
+		return fmt.Errorf("удаление задачи из базы данных: %w", err)
+	}
+	if _, _, err = b.EditMessageText(fmt.Sprintf("Задача '%s' удалена", messageRegister.Task.Name), &gotgbot.EditMessageTextOpts{
+		MessageId: messageRegister.BotMessageId,
+		ChatId:    ctx.EffectiveSender.ChatId,
+	}); err != nil {
+		return fmt.Errorf("изменение сообщения задачи, удаление задачи: %w", err)
+	}
+	if err = s.Repository.DeleteMessageRegisterByUserId(user.ID); err != nil {
+		return fmt.Errorf("очистка сообщений удаления задачи: %w", err)
+	}
+	return handlers.EndConversation()
+}
+
+func (s *Service) CallbackBackToTask(b *gotgbot.Bot, ctx *ext.Context) error {
+	userTGId := ctx.EffectiveSender.User.Id
+	callQuery := ctx.Update.CallbackQuery
+	if _, err := callQuery.Answer(b, &gotgbot.AnswerCallbackQueryOpts{Text: "Возврат подтвержден"}); err != nil {
+		return fmt.Errorf("ответ на возврат к задаче: %w", err)
+	}
+	user, err := s.Repository.GetUserByTGId(userTGId)
+	if err != nil {
+		return fmt.Errorf("%s: %w", types.ErrorStrokeFindUserByTG, err)
+	}
+	if len(user.Messages) == 0 || user.Messages[0].BotMessageId == 0 || user.Messages[0].TaskId == 0 {
+		return fmt.Errorf("сообщение редактирования задачи не найдено")
+	}
+	callQueryValues := strings.Split(callQuery.Data, ";")
+	var currentPage uint
+	for _, callQueryData := range callQueryValues {
+		if strings.HasPrefix(callQueryData, types.CallbackCurrentPage) {
+			pageStr := strings.Replace(callQueryData, types.CallbackCurrentPage, "", 1)
+			page, err := strconv.ParseUint(pageStr, 10, 64)
+			if err != nil {
+				return fmt.Errorf("получение номера страницы клавиатуры тем: %w", err)
+			}
+			currentPage = uint(page)
+		}
+	}
+	messageRegister := user.Messages[0]
+	message := TaskMessageFill("Информация о задаче", "Выберите действие", messageRegister.Task, messageRegister.Task.Themes)
+	if _, _, err = b.EditMessageText(message, &gotgbot.EditMessageTextOpts{
+		MessageId: messageRegister.BotMessageId,
+		ChatId:    ctx.EffectiveSender.ChatId,
+		ReplyMarkup: gotgbot.InlineKeyboardMarkup{
+			InlineKeyboard: utils.TaskActionButtons(currentPage),
+		},
+	}); err != nil {
+		return fmt.Errorf("изменение сообщения задачи: %w", err)
+	}
+	if err = s.Repository.UpsertMessageRegister(messageRegister); err != nil {
+		return fmt.Errorf("запись сообщения задачи: %w", err)
+	}
+	return handlers.NextConversationState(types.ConversationTaskActionChoose)
 }
 
 // GenerateTaskNameMessage - сформировать сообщение запроса имени задачи

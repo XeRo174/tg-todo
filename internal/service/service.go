@@ -11,6 +11,7 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers/filters/message"
 	"github.com/sirupsen/logrus"
 	"tg-todo/internal/bootstrap"
+	"tg-todo/internal/manager"
 	"tg-todo/internal/repository"
 	"tg-todo/internal/types"
 	"time"
@@ -46,6 +47,9 @@ func NewService(r *repository.Repository, bot *gotgbot.Bot, app bootstrap.Applic
 // Для получения этих данных можно спросить у пользователя его текущее время в 24 часом варианте, так получим возможность сравнить его с gmt и установить в профиле пользователя.
 
 func (s *Service) Start() {
+	m := manager.NewManager(s.Repository, time.Second*5)
+	m.Start()
+	defer m.Close()
 	dispatcher := ext.NewDispatcher(&ext.DispatcherOpts{
 		Error: func(b *gotgbot.Bot, ctx *ext.Context, err error) ext.DispatcherAction {
 			var convErr *handlers.ConversationStateChange
@@ -59,21 +63,29 @@ func (s *Service) Start() {
 		MaxRoutines: ext.DefaultMaxRoutines,
 		Logger:      s.App.Logger,
 	})
-	cancelCommand := handlers.NewCommand("cancel", s.CommandCancelHandler)
+
 	updater := ext.NewUpdater(dispatcher, &ext.UpdaterOpts{Logger: s.App.Logger})
-	dispatcher.AddHandler(handlers.NewCommand("start", s.CommandStartHandler))
-	dispatcher.AddHandler(handlers.NewCommand("common", s.CommandCommonValue))
+	startCommand := handlers.NewCommand(types.CommandStart, s.CommandStartHandler)
+	cancelCommand := handlers.NewCommand(types.CommandCancel, s.CommandCancelHandler)
+	themeCreateCommand := handlers.NewCommand(types.CommandThemeCreate, s.ConversationCreateThemeInit)
+	taskCreateCommand := handlers.NewCommand(types.CommandTaskCreateInit, s.ConversationCreateTaskInit)
+	themesCommand := handlers.NewCommand(types.CommandThemesGet, s.ConversationThemesInit)
+	tasksCommand := handlers.NewCommand(types.CommandTasksGet, s.ConversationTasksInit)
+	userEditCommand := handlers.NewCommand(types.CommandUserEdit, s.CommandUserTimezoneHandler)
+	allCommands := []handlers.Command{startCommand, cancelCommand, themeCreateCommand, taskCreateCommand, themesCommand, tasksCommand, userEditCommand}
+
+	dispatcher.AddHandler(startCommand)
 	dispatcher.AddHandler(cancelCommand)
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Equal(types.CallbackEmpty), s.CallbackEmpty))
 
 	dispatcher.AddHandler(handlers.NewConversation(
-		[]ext.Handler{handlers.NewCommand(types.CommandUserTimezoneEdit, s.CommandUserTimezoneHandler)},
+		[]ext.Handler{userEditCommand},
 		map[string][]ext.Handler{
 			types.ConversationUserEditChooseTimezone: {
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackUserSetTimezone), s.CallbackUserTimezoneChoose),
 			},
 		}, &handlers.ConversationOpts{
-			Exits:        []ext.Handler{cancelCommand},
+			Exits:        ExitHandlers(userEditCommand, allCommands),
 			AllowReEntry: true,
 			StateStorage: conversation.NewInMemoryStorage(conversation.KeyStrategySenderAndChat),
 		},
@@ -81,42 +93,21 @@ func (s *Service) Start() {
 
 	//Разговор создания новой темы
 	dispatcher.AddHandler(handlers.NewConversation(
-		[]ext.Handler{handlers.NewCommand(types.CommandThemeCreateInit, s.ConversationCreateThemeInit)},
+		[]ext.Handler{themeCreateCommand},
 		map[string][]ext.Handler{
 			types.ConversationThemeCreateSetName: {handlers.NewMessage(noCommand, s.ConversationCreateThemeSetName)},
 		}, &handlers.ConversationOpts{
-			Exits:        []ext.Handler{cancelCommand},
+			Exits:        ExitHandlers(themeCreateCommand, allCommands),
 			AllowReEntry: true,
 			StateStorage: conversation.NewInMemoryStorage(conversation.KeyStrategySenderAndChat),
 		}))
 
 	dispatcher.AddHandler(handlers.NewConversation(
-		[]ext.Handler{handlers.NewCommand(types.CommandThemesGet, s.ConversationThemesInit)},
-		map[string][]ext.Handler{
-			types.ConversationThemeChoose: {
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackThemeChoose), s.ConversationThemeChose),
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackChangePage), s.CallbackThemeChangeThemesPage),
-			},
-			types.ConversationThemeActionChoose: {
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackThemeAction), s.ConversationChoseThemeAction),
-			},
-			types.ConversationThemeEditSetName: {
-				handlers.NewMessage(noCommand, s.ConversationEditThemeSetName),
-			},
-			types.ConversationThemeDelete: {},
-		},
-		&handlers.ConversationOpts{
-			Exits:        []ext.Handler{cancelCommand},
-			AllowReEntry: true,
-			StateStorage: conversation.NewInMemoryStorage(conversation.KeyStrategySenderAndChat),
-		}))
-
-	dispatcher.AddHandler(handlers.NewConversation(
-		[]ext.Handler{handlers.NewCommand(types.CommandTasksGet, s.ConversationTasksInit)},
+		[]ext.Handler{tasksCommand},
 		map[string][]ext.Handler{
 			types.ConversationTaskChoose: {
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskChoose), s.ConversationTaskChoose),
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackChangePage), s.CallbackTaskChangeTasksPage),
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackChangeTaskPage), s.CallbackTaskChangeTasksPage),
 			},
 			types.ConversationTaskActionChoose: {
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskAction), s.ConversationChooseTaskAction),
@@ -156,7 +147,7 @@ func (s *Service) Start() {
 				//Завершение выбора тем
 				handlers.NewCallback(callbackquery.Equal(types.CallbackTaskSetThemeDone), s.CallbackTaskDoneTheme),
 				//Смена страницы тем
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackChangePage), s.CallbackTaskChangeThemesPage),
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackChangeThemeForTaskPage), s.CallbackTaskChangeThemesPage),
 			},
 
 			//Работа по установки статуса задачи
@@ -165,21 +156,48 @@ func (s *Service) Start() {
 			},
 
 			//Работа по удалению задачи
-			types.ConversationTaskDelete: {},
+			types.ConversationTaskDelete: {
+				handlers.NewCallback(callbackquery.Equal(types.CallbackConfirmDelete), s.CallbackTaskDeleteConfirm),
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackBackToObject), s.CallbackBackToTask),
+			},
 		},
 		&handlers.ConversationOpts{
-			Exits: []ext.Handler{
-				cancelCommand,
+			Exits: append(
+				ExitHandlers(tasksCommand, allCommands),
 				handlers.NewCallback(callbackquery.Equal(types.CallbackTaskComplete), s.CallbackTaskDone),
 				handlers.NewCallback(callbackquery.Equal(types.CallbackTaskStop), s.CallbackTaskCancel),
+			),
+			AllowReEntry: true,
+			StateStorage: conversation.NewInMemoryStorage(conversation.KeyStrategySenderAndChat),
+		}))
+
+	dispatcher.AddHandler(handlers.NewConversation(
+		[]ext.Handler{themesCommand},
+		map[string][]ext.Handler{
+			types.ConversationThemeChoose: {
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackThemeChoose), s.ConversationThemeChose),
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackChangeThemePage), s.CallbackThemeChangeThemesPage),
 			},
+			types.ConversationThemeActionChoose: {
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackThemeAction), s.ConversationChoseThemeAction),
+			},
+			types.ConversationThemeEditSetName: {
+				handlers.NewMessage(noCommand, s.ConversationEditThemeSetName),
+			},
+			types.ConversationThemeDelete: {
+				handlers.NewCallback(callbackquery.Equal(types.CallbackConfirmDelete), s.CallbackThemeDeleteConfirm),
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackBackToObject), s.CallbackBackToTheme),
+			},
+		},
+		&handlers.ConversationOpts{
+			Exits:        ExitHandlers(themesCommand, allCommands),
 			AllowReEntry: true,
 			StateStorage: conversation.NewInMemoryStorage(conversation.KeyStrategySenderAndChat),
 		}))
 
 	//Разговор создания новой задачи
 	dispatcher.AddHandler(handlers.NewConversation(
-		[]ext.Handler{handlers.NewCommand(types.CommandTaskCreateInit, s.ConversationCreateTaskInit)},
+		[]ext.Handler{taskCreateCommand},
 		map[string][]ext.Handler{
 			types.ConversationTaskCreateSetName: {
 				handlers.NewMessage(noCommand, s.ConversationCreateTaskSetName),
@@ -211,15 +229,15 @@ func (s *Service) Start() {
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskSetTheme), s.ConversationCreateTaskSetTheme),
 				handlers.NewCallback(callbackquery.Prefix(types.CallbackTaskUnsetTheme), s.ConversationCreateTaskUnsetTheme),
 				handlers.NewCallback(callbackquery.Equal(types.CallbackTaskSetThemeDone), s.CallbackTaskDoneTheme),
-				handlers.NewCallback(callbackquery.Prefix(types.CallbackChangePage), s.CallbackTaskChangeThemesPage),
+				handlers.NewCallback(callbackquery.Prefix(types.CallbackChangeThemeForTaskPage), s.CallbackTaskChangeThemesPage),
 			},
 		},
 		&handlers.ConversationOpts{
-			Exits: []ext.Handler{
-				cancelCommand,
+			Exits: append(
+				ExitHandlers(taskCreateCommand, allCommands),
 				handlers.NewCallback(callbackquery.Equal(types.CallbackTaskComplete), s.CallbackTaskDone),
 				handlers.NewCallback(callbackquery.Equal(types.CallbackTaskStop), s.CallbackTaskCancel),
-			},
+			),
 			AllowReEntry: true,
 			StateStorage: conversation.NewInMemoryStorage(conversation.KeyStrategySenderAndChat),
 		}))
@@ -314,6 +332,34 @@ func (s *Service) CommandCommonValue(b *gotgbot.Bot, ctx *ext.Context) error {
 	if _, err := s.Repository.CreateTheme(theme5); err != nil {
 		return fmt.Errorf("создание темы 5: %w", err)
 	}
+	task1 := types.TaskModel{
+		User:     user,
+		Name:     "Первая",
+		Deadline: time.Date(2026, 03, 13, 17, 50, 00, 0, time.UTC),
+		Status:   types.TaskStatusInWork,
+	}
+	task2 := types.TaskModel{
+		User:     user,
+		Name:     "вторая",
+		Deadline: time.Date(2026, 03, 13, 17, 49, 00, 0, time.UTC),
+		Status:   types.TaskStatusInWork,
+	}
+	task3 := types.TaskModel{
+		User:     user,
+		Name:     "третья",
+		Deadline: time.Date(2026, 03, 13, 17, 52, 00, 0, time.UTC),
+		Status:   types.TaskStatusInWork,
+	}
+	if _, err := s.Repository.CreateTask(task1); err != nil {
+		return fmt.Errorf("создание задачи 1: %w", err)
+	}
+	if _, err := s.Repository.CreateTask(task2); err != nil {
+		return fmt.Errorf("создание задачи 2: %w", err)
+	}
+	if _, err := s.Repository.CreateTask(task3); err != nil {
+		return fmt.Errorf("создание задачи 3: %w", err)
+	}
+
 	return nil
 }
 
@@ -355,4 +401,14 @@ func MessageOperationBeauty(messageRegister types.MessageRegisterModel) string {
 		return title
 	}
 
+}
+
+func ExitHandlers(commandException handlers.Command, handlers []handlers.Command) []ext.Handler {
+	var exits []ext.Handler
+	for _, handler := range handlers {
+		if handler.Command != commandException.Command {
+			exits = append(exits, handler)
+		}
+	}
+	return exits
 }

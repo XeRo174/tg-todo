@@ -76,8 +76,12 @@ const (
 	// CallbackCurrentPage - текущая страница
 	CallbackCurrentPage = "current_page:"
 
-	// CallbackChangePage - смена страницы
-	CallbackChangePage = "change_page:"
+	// CallbackChangeThemePage - смена страницы выбора тем
+	CallbackChangeThemePage = "change_theme_page:"
+	// CallbackChangeTaskPage - смена страницы выбора задач
+	CallbackChangeTaskPage = "change_task_page:"
+	// CallbackChangeThemeForTaskPage - смена страницы выбора тем для задачи
+	CallbackChangeThemeForTaskPage = "change_theme_for_task_page:"
 
 	// CallbackDeadlineShow - выбор параметров сроков для отображения
 	CallbackDeadlineShow = "deadline_show:"
@@ -95,16 +99,21 @@ const (
 	// CallbackTaskSetDeadlineDone - завершение установки сроков
 	CallbackTaskSetDeadlineDone = "task_set_deadline_done:"
 
+	CallbackConfirmDelete = "delete_confirm"
+	CallbackBackToObject  = "back_to_object"
+
 	CallbackEmpty = "callback_empty_skip"
 )
 
 // Список констант определяющих команды
 const (
-	CommandThemeCreateInit  = "create_theme"
-	CommandTasksGet         = "tasks"
-	CommandThemesGet        = "themes"
-	CommandTaskCreateInit   = "create_task"
-	CommandUserTimezoneEdit = "edit_user"
+	CommandStart          = "start"
+	CommandCancel         = "cancel"
+	CommandThemeCreate    = "create_theme"
+	CommandTaskCreateInit = "create_task"
+	CommandThemesGet      = "themes"
+	CommandTasksGet       = "tasks"
+	CommandUserEdit       = "edit_user"
 )
 
 const (

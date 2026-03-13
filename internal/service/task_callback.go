@@ -536,7 +536,7 @@ func (s *Service) CallbackTaskChangeThemesPage(b *gotgbot.Bot, ctx *ext.Context)
 	if len(user.Messages) == 0 || user.Messages[0].BotMessageId == 0 {
 		return fmt.Errorf("сообщение редактирования задачи не найдено")
 	}
-	pageStr := strings.Replace(callQuery.Data, types.CallbackChangePage, "", 1)
+	pageStr := strings.Replace(callQuery.Data, types.CallbackChangeThemeForTaskPage, "", 1)
 	page, err := strconv.Atoi(pageStr)
 	if err != nil {
 		return fmt.Errorf("получение номера страницы клавиатуры темы: %w", err)

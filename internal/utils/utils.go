@@ -87,7 +87,7 @@ func ThemeActionButtons(currentPage uint) [][]gotgbot.InlineKeyboardButton {
 		{Text: "Редактировать", CallbackData: fmt.Sprintf("%s%s", types.CallbackThemeAction, types.ActionEdit)},
 	})
 	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
-		{Text: "Удалить", CallbackData: fmt.Sprintf("%s%s", types.CallbackThemeAction, types.ActionDelete)},
+		{Text: "Удалить", CallbackData: fmt.Sprintf("%s%s;%s%d", types.CallbackThemeAction, types.ActionDelete, types.CallbackCurrentPage, currentPage)},
 	})
 	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
 		{Text: "Назад", CallbackData: fmt.Sprintf("%s%s;%s%d", types.CallbackThemeAction, types.ActionBack, types.CallbackCurrentPage, currentPage)},
@@ -105,7 +105,7 @@ func TaskActionButtons(currentPage uint) [][]gotgbot.InlineKeyboardButton {
 		{Text: "Установить статус", CallbackData: fmt.Sprintf("%s%s", types.CallbackTaskAction, types.ActionStatus)},
 	})
 	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
-		{Text: "Удалить", CallbackData: fmt.Sprintf("%s%s", types.CallbackTaskAction, types.ActionDelete)},
+		{Text: "Удалить", CallbackData: fmt.Sprintf("%s%s;%s%d", types.CallbackTaskAction, types.ActionDelete, types.CallbackCurrentPage, currentPage)},
 	})
 	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
 		{Text: "Назад", CallbackData: fmt.Sprintf("%s%s;%s%d", types.CallbackTaskAction, types.ActionBack, types.CallbackCurrentPage, currentPage)},
@@ -162,7 +162,7 @@ func ChooseThemeInlineKeyboard(themesByPage []types.ThemeModel, totalPages, curr
 		})
 	}
 	if totalPages > 1 {
-		buttons = append(buttons, CreateArrowButtons(currentPage, totalPages)...)
+		buttons = append(buttons, CreateArrowButtons(currentPage, totalPages, types.CallbackChangeThemePage)...)
 	}
 	return buttons
 }
@@ -176,7 +176,7 @@ func ChooseTaskInlineKeyboard(tasksByPage []types.TaskModel, totalPages, current
 		})
 	}
 	if totalPages > 1 {
-		buttons = append(buttons, CreateArrowButtons(currentPage, totalPages)...)
+		buttons = append(buttons, CreateArrowButtons(currentPage, totalPages, types.CallbackChangeTaskPage)...)
 	}
 	return buttons
 }
@@ -198,7 +198,7 @@ func ChooseThemeForTaskInlineKeyboard(task types.TaskModel, themesByPage []types
 		}
 	}
 	if totalPages > 1 {
-		buttons = append(buttons, CreateArrowButtons(currentPage, totalPages)...)
+		buttons = append(buttons, CreateArrowButtons(currentPage, totalPages, types.CallbackChangeThemeForTaskPage)...)
 	}
 	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
 		{Text: "Завершить выбор", CallbackData: types.CallbackTaskSetThemeDone}},
@@ -207,27 +207,38 @@ func ChooseThemeForTaskInlineKeyboard(task types.TaskModel, themesByPage []types
 }
 
 // CreateArrowButtons - формирует клавиатуру из стрелок переключения страниц
-func CreateArrowButtons(currentPage, totalPages int) [][]gotgbot.InlineKeyboardButton {
+func CreateArrowButtons(currentPage, totalPages int, changePageCallback string) [][]gotgbot.InlineKeyboardButton {
 	var buttons [][]gotgbot.InlineKeyboardButton
 	if currentPage == 1 {
 		// Если мы на первой странице: < - ведет на последнюю страницу и > - ведет на следующую страницу
 		buttons = append(buttons, []gotgbot.InlineKeyboardButton{
-			{Text: fmt.Sprintf("< (%d/%d)", totalPages, totalPages), CallbackData: fmt.Sprintf("%s%d", types.CallbackChangePage, totalPages)},
-			{Text: fmt.Sprintf("(%d/%d) >", currentPage+1, totalPages), CallbackData: fmt.Sprintf("%s%d", types.CallbackChangePage, currentPage+1)},
+			{Text: fmt.Sprintf("< (%d/%d)", totalPages, totalPages), CallbackData: fmt.Sprintf("%s%d", changePageCallback, totalPages)},
+			{Text: fmt.Sprintf("(%d/%d) >", currentPage+1, totalPages), CallbackData: fmt.Sprintf("%s%d", changePageCallback, currentPage+1)},
 		})
 	} else if currentPage == totalPages {
 		//Если мы на последней странице: < - ведет на прошлую страницу и > - ведет на первую страницу
 		buttons = append(buttons, []gotgbot.InlineKeyboardButton{
-			{Text: fmt.Sprintf("< (%d/%d)", currentPage-1, totalPages), CallbackData: fmt.Sprintf("%s%d", types.CallbackChangePage, currentPage-1)},
-			{Text: fmt.Sprintf("(%d/%d) >", 1, totalPages), CallbackData: fmt.Sprintf("%s%d", types.CallbackChangePage, 1)},
+			{Text: fmt.Sprintf("< (%d/%d)", currentPage-1, totalPages), CallbackData: fmt.Sprintf("%s%d", changePageCallback, currentPage-1)},
+			{Text: fmt.Sprintf("(%d/%d) >", 1, totalPages), CallbackData: fmt.Sprintf("%s%d", changePageCallback, 1)},
 		})
 	} else {
 		//Иначе: < - ведет на прошлую страницу и > - ведет на следующую страницу
 		buttons = append(buttons, []gotgbot.InlineKeyboardButton{
-			{Text: fmt.Sprintf("< (%d/%d)", currentPage-1, totalPages), CallbackData: fmt.Sprintf("%s%d", types.CallbackChangePage, currentPage-1)},
-			{Text: fmt.Sprintf("(%d/%d) >", currentPage+1, totalPages), CallbackData: fmt.Sprintf("%s%d", types.CallbackChangePage, currentPage+1)},
+			{Text: fmt.Sprintf("< (%d/%d)", currentPage-1, totalPages), CallbackData: fmt.Sprintf("%s%d", changePageCallback, currentPage-1)},
+			{Text: fmt.Sprintf("(%d/%d) >", currentPage+1, totalPages), CallbackData: fmt.Sprintf("%s%d", changePageCallback, currentPage+1)},
 		})
 	}
+	return buttons
+}
+
+func ConfirmDeleteButtons(currentPage int) [][]gotgbot.InlineKeyboardButton {
+	var buttons [][]gotgbot.InlineKeyboardButton
+	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
+		{Text: "Подтвердить удаление", CallbackData: types.CallbackConfirmDelete},
+	})
+	buttons = append(buttons, []gotgbot.InlineKeyboardButton{
+		{Text: "Отмена", CallbackData: fmt.Sprintf("%s;%s%d", types.CallbackBackToObject, types.CallbackCurrentPage, currentPage)},
+	})
 	return buttons
 }
 

@@ -104,7 +104,7 @@ func (s *Service) ConversationEditThemeChangeThemesPage(b *gotgbot.Bot, ctx *ext
 	if len(user.Messages) == 0 || user.Messages[0].BotMessageId == 0 {
 		return fmt.Errorf("сообщение редактирования темы не найдено")
 	}
-	pageStr := strings.Replace(callQuery.Data, types.CallbackChangePage, "", 1)
+	pageStr := strings.Replace(callQuery.Data, types.CallbackChangeThemePage, "", 1)
 	page, err := strconv.ParseUint(pageStr, 10, 64)
 	if err != nil {
 		return fmt.Errorf("получение номера страницы клавиатуры тем: %w", err)

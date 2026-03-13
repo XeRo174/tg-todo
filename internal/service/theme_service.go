@@ -156,6 +156,7 @@ func (s *Service) ConversationChoseThemeAction(b *gotgbot.Bot, ctx *ext.Context)
 		message = ThemeMessageFill("Удаление темы", "Вы точно хотите удалить тему?", theme)
 		conversationState = types.ConversationThemeDelete
 		messageRegister.Operation = types.MessageRegisterOperationThemeDelete
+		keyboard = utils.ConfirmDeleteButtons(int(currentPage))
 	case types.ActionBack:
 		themeFilter := types.ThemeFilter{UserTGId: userTGId, SortQuery: types.SortQuery{Size: types.ThemeKeyboardSize, Page: currentPage}}
 		themes, err := s.Repository.GetThemes(themeFilter)
@@ -201,7 +202,7 @@ func (s *Service) CallbackThemeChangeThemesPage(b *gotgbot.Bot, ctx *ext.Context
 	if len(user.Messages) == 0 || user.Messages[0].BotMessageId == 0 {
 		return fmt.Errorf("сообщение редактирования задачи не найдено")
 	}
-	pageStr := strings.Replace(callQuery.Data, types.CallbackChangePage, "", 1)
+	pageStr := strings.Replace(callQuery.Data, types.CallbackChangeThemePage, "", 1)
 	page, err := strconv.Atoi(pageStr)
 	if err != nil {
 		return fmt.Errorf("получение номера страницы клавиатуры тем: %w", err)
@@ -226,4 +227,76 @@ func (s *Service) CallbackThemeChangeThemesPage(b *gotgbot.Bot, ctx *ext.Context
 		return fmt.Errorf("изменение сообщения темы, смена страницы клавиатуры тем: %w", err)
 	}
 	return nil
+}
+
+func (s *Service) CallbackThemeDeleteConfirm(b *gotgbot.Bot, ctx *ext.Context) error {
+	userTGId := ctx.EffectiveSender.User.Id
+	callQuery := ctx.Update.CallbackQuery
+	if _, err := callQuery.Answer(b, &gotgbot.AnswerCallbackQueryOpts{Text: "Удаление подтверждено"}); err != nil {
+		return fmt.Errorf("ответ на подтверждение удаления: %w", err)
+	}
+	user, err := s.Repository.GetUserByTGId(userTGId)
+	if err != nil {
+		return fmt.Errorf("%s: %w", types.ErrorStrokeFindUserByTG, err)
+	}
+	if len(user.Messages) == 0 || user.Messages[0].BotMessageId == 0 || user.Messages[0].ThemeId == 0 {
+		return fmt.Errorf("сообщение редактирования задачи не найдено")
+	}
+	messageRegister := user.Messages[0]
+	if err = s.Repository.DeleteTheme(messageRegister.ThemeId); err != nil {
+		return fmt.Errorf("удаоение темы из базы данных: %w", err)
+	}
+	if _, _, err = b.EditMessageText(fmt.Sprintf("Тема '%s' удалена", messageRegister.Theme.Name), &gotgbot.EditMessageTextOpts{
+		MessageId: messageRegister.BotMessageId,
+		ChatId:    ctx.EffectiveSender.ChatId,
+	}); err != nil {
+		return fmt.Errorf("изменение сообщения темы, удаление темы: %w", err)
+	}
+	if err = s.Repository.DeleteMessageRegisterByUserId(user.ID); err != nil {
+		return fmt.Errorf("очистка соообщени удаления темы: %w", err)
+	}
+	return handlers.EndConversation()
+}
+
+func (s *Service) CallbackBackToTheme(b *gotgbot.Bot, ctx *ext.Context) error {
+	userTGId := ctx.EffectiveSender.User.Id
+	callQuery := ctx.Update.CallbackQuery
+	if _, err := callQuery.Answer(b, &gotgbot.AnswerCallbackQueryOpts{Text: "Возврат подтверждено"}); err != nil {
+		return fmt.Errorf("ответ на возврат к теме: %w", err)
+	}
+	user, err := s.Repository.GetUserByTGId(userTGId)
+	if err != nil {
+		return fmt.Errorf("%s: %w", types.ErrorStrokeFindUserByTG, err)
+	}
+	if len(user.Messages) == 0 || user.Messages[0].BotMessageId == 0 || user.Messages[0].ThemeId == 0 {
+		return fmt.Errorf("сообщение редактирования задачи не найдено")
+	}
+	callQueryValues := strings.Split(callQuery.Data, ";")
+	var currentPage uint
+	for _, callQueryData := range callQueryValues {
+		if strings.HasPrefix(callQueryData, types.CallbackCurrentPage) {
+			pageStr := strings.Replace(callQueryData, types.CallbackCurrentPage, "", 1)
+			page, err := strconv.ParseUint(pageStr, 10, 64)
+			if err != nil {
+				return fmt.Errorf("получение номера страницы клавиатуры тем: %w", err)
+			}
+			currentPage = uint(page)
+		}
+	}
+	messageRegister := user.Messages[0]
+	message := ThemeMessageFill("Информация о теме", "Выберите действие", messageRegister.Theme)
+	if _, _, err = b.EditMessageText(message, &gotgbot.EditMessageTextOpts{
+		MessageId: messageRegister.BotMessageId,
+		ChatId:    ctx.EffectiveSender.ChatId,
+		ReplyMarkup: gotgbot.InlineKeyboardMarkup{
+			InlineKeyboard: utils.ThemeActionButtons(currentPage),
+		},
+	}); err != nil {
+		return fmt.Errorf("изменение сообщения темы: %w", err)
+	}
+	if err = s.Repository.UpsertMessageRegister(messageRegister); err != nil {
+		return fmt.Errorf("запись сообщения темы: %w", err)
+	}
+	return handlers.NextConversationState(types.ConversationThemeActionChoose)
+
 }
