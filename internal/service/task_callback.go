@@ -246,10 +246,14 @@ func (s *Service) CallbackTaskDeadlineChooseYear(b *gotgbot.Bot, ctx *ext.Contex
 		return fmt.Errorf("получение года из клавиатуры: %w", err)
 	}
 	//time.Utc заменить на user.Timezone
+	loc, err := time.LoadLocation(user.TimeZone)
+	if err != nil {
+		loc = time.UTC
+	}
 	if task.Deadline.IsZero() {
-		task.Deadline = time.Date(year, time.Now().Month(), 1, 0, 0, 0, 0, time.UTC)
+		task.Deadline = time.Date(year, time.Now().Month(), 1, 0, 0, 0, 0, loc)
 	} else {
-		task.Deadline = time.Date(year, task.Deadline.Month(), 1, task.Deadline.Hour(), task.Deadline.Minute(), 0, 0, time.UTC)
+		task.Deadline = time.Date(year, task.Deadline.Month(), 1, task.Deadline.Hour(), task.Deadline.Minute(), 0, 0, loc)
 	}
 	if err = s.Repository.UpdateTask(task); err != nil {
 		return fmt.Errorf("обновление сроков задачи: %w", err)
@@ -291,10 +295,14 @@ func (s *Service) CallbackTaskDeadlineChooseMonth(b *gotgbot.Bot, ctx *ext.Conte
 		return fmt.Errorf("получение года из клавиатуры: %w", err)
 	}
 	//time.Utc заменить на user.Timezone
+	loc, err := time.LoadLocation(user.TimeZone)
+	if err != nil {
+		loc = time.UTC
+	}
 	if task.Deadline.IsZero() {
-		task.Deadline = time.Date(time.Now().Year(), time.Month(month), 1, 0, 0, 0, 0, time.UTC)
+		task.Deadline = time.Date(time.Now().Year(), time.Month(month), 1, 0, 0, 0, 0, loc)
 	} else {
-		task.Deadline = time.Date(task.Deadline.Year(), time.Month(month), 1, task.Deadline.Hour(), task.Deadline.Minute(), task.Deadline.Minute(), 0, time.UTC)
+		task.Deadline = time.Date(task.Deadline.Year(), time.Month(month), 1, task.Deadline.Hour(), task.Deadline.Minute(), task.Deadline.Minute(), 0, loc)
 	}
 	if err = s.Repository.UpdateTask(task); err != nil {
 		return fmt.Errorf("обновление сроков задачи: %w", err)
@@ -336,10 +344,14 @@ func (s *Service) CallbackTaskDeadlineChooseDay(b *gotgbot.Bot, ctx *ext.Context
 		return fmt.Errorf("получение дня из клавиатуры: %w", err)
 	}
 	//time.Utc заменить на user.Timezone
+	loc, err := time.LoadLocation(user.TimeZone)
+	if err != nil {
+		loc = time.UTC
+	}
 	if task.Deadline.IsZero() {
-		task.Deadline = time.Date(time.Now().Year(), time.Now().Month(), day, 0, 0, 0, 0, time.UTC)
+		task.Deadline = time.Date(time.Now().Year(), time.Now().Month(), day, 0, 0, 0, 0, loc)
 	} else {
-		task.Deadline = time.Date(task.Deadline.Year(), task.Deadline.Month(), day, task.Deadline.Hour(), task.Deadline.Minute(), 0, 0, time.UTC)
+		task.Deadline = time.Date(task.Deadline.Year(), task.Deadline.Month(), day, task.Deadline.Hour(), task.Deadline.Minute(), 0, 0, loc)
 	}
 	if err = s.Repository.UpdateTask(task); err != nil {
 		return fmt.Errorf("обновление сроков задачи: %w", err)
@@ -381,10 +393,14 @@ func (s *Service) CallbackTaskDeadlineChooseHour(b *gotgbot.Bot, ctx *ext.Contex
 		return fmt.Errorf("получение часа из клавиатуры: %w", err)
 	}
 	//time.Utc заменить на user.Timezone
+	loc, err := time.LoadLocation(user.TimeZone)
+	if err != nil {
+		loc = time.UTC
+	}
 	if task.Deadline.IsZero() {
-		task.Deadline = time.Date(time.Now().Year(), time.Now().Month(), time.Now().Day(), hour, 0, 0, 0, time.UTC)
+		task.Deadline = time.Date(time.Now().Year(), time.Now().Month(), time.Now().Day(), hour, 0, 0, 0, loc)
 	} else {
-		task.Deadline = time.Date(task.Deadline.Year(), task.Deadline.Month(), task.Deadline.Day(), hour, task.Deadline.Minute(), 0, 0, time.UTC)
+		task.Deadline = time.Date(task.Deadline.Year(), task.Deadline.Month(), task.Deadline.Day(), hour, task.Deadline.Minute(), 0, 0, loc)
 	}
 	if err = s.Repository.UpdateTask(task); err != nil {
 		return fmt.Errorf("обновление сроков задачи: %w", err)
@@ -426,10 +442,14 @@ func (s *Service) CallbackTaskDeadlineChooseMinute(b *gotgbot.Bot, ctx *ext.Cont
 		return fmt.Errorf("получение минут из клавиатуры: %w", err)
 	}
 	//time.Utc заменить на user.Timezone
+	loc, err := time.LoadLocation(user.TimeZone)
+	if err != nil {
+		loc = time.UTC
+	}
 	if task.Deadline.IsZero() {
-		task.Deadline = time.Date(time.Now().Year(), time.Now().Month(), time.Now().Day(), time.Now().Hour(), minute, 0, 0, time.UTC)
+		task.Deadline = time.Date(time.Now().Year(), time.Now().Month(), time.Now().Day(), time.Now().Hour(), minute, 0, 0, loc)
 	} else {
-		task.Deadline = time.Date(task.Deadline.Year(), task.Deadline.Month(), task.Deadline.Day(), task.Deadline.Hour(), minute, 0, 0, time.UTC)
+		task.Deadline = time.Date(task.Deadline.Year(), task.Deadline.Month(), task.Deadline.Day(), task.Deadline.Hour(), minute, 0, 0, loc)
 	}
 	if err = s.Repository.UpdateTask(task); err != nil {
 		return fmt.Errorf("обновление сроков задачи: %w", err)

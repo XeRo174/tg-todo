@@ -28,7 +28,11 @@ func ThemeStroke(themes []types.ThemeModel) string {
 	for _, theme := range themes {
 		strokes = append(strokes, fmt.Sprintf("%s", theme.Name))
 	}
-	return strings.Join(strokes, ", ")
+	if len(strokes) > 0 {
+		return strings.Join(strokes, ", ")
+	} else {
+		return "тем нет."
+	}
 }
 
 // Contains - проверяет есть ли тема с указанным id в массиве тем

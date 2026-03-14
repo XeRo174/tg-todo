@@ -9,55 +9,47 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers/conversation"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers/filters/callbackquery"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers/filters/message"
-	"github.com/sirupsen/logrus"
 	"tg-todo/internal/bootstrap"
-	"tg-todo/internal/manager"
 	"tg-todo/internal/repository"
 	"tg-todo/internal/types"
 	"time"
 )
 
 type Service struct {
-	Repository *repository.Repository
-	Bot        *gotgbot.Bot
-	App        bootstrap.Application
+	Repository    *repository.Repository
+	Bot           *gotgbot.Bot
+	App           bootstrap.Application
+	SignalChan    chan struct{}
+	CheckInterval time.Duration
 }
 
-func NewService(r *repository.Repository, bot *gotgbot.Bot, app bootstrap.Application) *Service {
+func NewService(r *repository.Repository, bot *gotgbot.Bot, app bootstrap.Application, checkInterval time.Duration) *Service {
 	return &Service{
-		Repository: r,
-		Bot:        bot,
-		App:        app,
+		Repository:    r,
+		Bot:           bot,
+		App:           app,
+		CheckInterval: checkInterval,
+		SignalChan:    make(chan struct{}),
 	}
 }
-
-//todo - возможность пропускать ненужные параметры для задачи.
-
-//todo - редактирование тем и задач.
-
-//todo - уменьшение количества отдельных сообщений. При создании задачи, отправляется слишком много отдельных сообщений-вопросов. Решение - в идеале, после получения /create_task отправляется одно сообщение, которое будет последовательно редактироваться дополняясь новыми данными.
-// Примерный вид "Создание новой задачи\nИмя задачи: Купить учебник по sql\nСроки выполнения: 04.03.2026\n\n\nВведите приоритет задачи"
-// Под сообщением будет ряд кнопок: Создать - завершить создание с текущими данными; Редактировать - появляются кнопки каждого поля, после нажатия надо ввести-выбрать новое значение и процесс продолжается; Отменить - черновик задачи удалятся из базы, процесс завершен. В зависимости будут показываться и скрываться разные кнопки.
 
 //todo - менеджер уведомления задач. Для уведомления пользователя о сроках задачи нужен Менеджер работающий в отдельном потоке (goroutine). Он будет периодически обращаться к бд и получать все не выполненные задачи.
 // Также нужно поле у Задачи, отвечающее за количество уведомлений, в нем будет считаться за какое время было уведомление, за день, за час, за 10 минут. (Условный пример). Если остался час до окончания задачи и подобное сообщение не было прежде отправлено, то Менеджер подает отправляет сообщение пользователю.
 
-//todo - Получение часовой зоны пользователя. Чтобы уведомления о сроках задачи отправлялись в правильное время нужно учитывать время пользователя.
-// Иначе, если пользователь живет по GMT+5 и ставит сроки задачи 14:00:00, а Сервер будет работать в Москве, то он отправит уведомление "Остался час" в 13:00:00 по Москве, а у пользователя будет уже 15:00:00.
-// Для получения этих данных можно спросить у пользователя его текущее время в 24 часом варианте, так получим возможность сравнить его с gmt и установить в профиле пользователя.
-
 func (s *Service) Start() {
-	m := manager.NewManager(s.Repository, time.Second*5)
-	m.Start()
-	defer m.Close()
 	dispatcher := ext.NewDispatcher(&ext.DispatcherOpts{
 		Error: func(b *gotgbot.Bot, ctx *ext.Context, err error) ext.DispatcherAction {
 			var convErr *handlers.ConversationStateChange
 			if errors.As(err, &convErr) && convErr.End {
 				return ext.DispatcherActionNoop
 			}
-			//todo отправка сообщения пользователю
-			logrus.Errorf("Ошибка во время обработки сообщения: %+v", err)
+			//errorMessage := fmt.Sprintf("Ошибка по время обработки сообщения: %+v", err)
+			//adminMessage, err := b.SendMessage(adminTGId, errorMessage, nil)
+			if _, err := b.SendMessage(ctx.EffectiveSender.ChatId, "Во время обработки произошла ошибка", nil); err != nil {
+				s.App.Logger.Warn(fmt.Sprintf("Ошибка отправки пользователю сообщение предупреждение: %v", err))
+			}
+			s.App.Logger.Error(fmt.Sprintf("ошибка во время обработки сообщения: %+v", err))
+
 			return ext.DispatcherActionNoop
 		},
 		MaxRoutines: ext.DefaultMaxRoutines,
@@ -66,6 +58,7 @@ func (s *Service) Start() {
 
 	updater := ext.NewUpdater(dispatcher, &ext.UpdaterOpts{Logger: s.App.Logger})
 	startCommand := handlers.NewCommand(types.CommandStart, s.CommandStartHandler)
+	//commonCommand := handlers.NewCommand("common", s.CommandCommonValue)
 	cancelCommand := handlers.NewCommand(types.CommandCancel, s.CommandCancelHandler)
 	themeCreateCommand := handlers.NewCommand(types.CommandThemeCreate, s.ConversationCreateThemeInit)
 	taskCreateCommand := handlers.NewCommand(types.CommandTaskCreateInit, s.ConversationCreateTaskInit)
@@ -76,6 +69,7 @@ func (s *Service) Start() {
 
 	dispatcher.AddHandler(startCommand)
 	dispatcher.AddHandler(cancelCommand)
+	//dispatcher.AddHandler(commonCommand)
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Equal(types.CallbackEmpty), s.CallbackEmpty))
 
 	dispatcher.AddHandler(handlers.NewConversation(
@@ -264,15 +258,14 @@ func (s *Service) CommandStartHandler(b *gotgbot.Bot, ctx *ext.Context) error {
 	newUser := types.UserModel{
 		TGId:     ctx.EffectiveSender.User.Id,
 		Username: ctx.EffectiveSender.User.Username,
+		ChatId:   ctx.EffectiveSender.ChatId,
+		TimeZone: "Europe/Moscow",
 	}
 	if err := s.Repository.CreateUser(newUser); err != nil {
 		return fmt.Errorf("создание нового пользователя: %w", err)
 	}
-	if _, err := b.SendMessage(ctx.EffectiveSender.ChatId, "Пользователь создан", nil); err != nil {
+	if _, err := b.SendMessage(ctx.EffectiveSender.ChatId, fmt.Sprintf("Пользователь создан, по умолчанию используется московское время. Используйте '/%s' для смены", types.CommandUserEdit), nil); err != nil {
 		return fmt.Errorf("отправка стартового сообщения: %w", err)
-	}
-	if err := s.CommandCommonValue(b, ctx); err != nil {
-		return fmt.Errorf("установка базовых тем: %w", err)
 	}
 	return nil
 }
@@ -332,22 +325,27 @@ func (s *Service) CommandCommonValue(b *gotgbot.Bot, ctx *ext.Context) error {
 	if _, err := s.Repository.CreateTheme(theme5); err != nil {
 		return fmt.Errorf("создание темы 5: %w", err)
 	}
+	loc, err := time.LoadLocation(user.TimeZone)
+	if err != nil {
+		return fmt.Errorf("загрузка локации")
+	}
+	timeNow := time.Now().In(loc)
 	task1 := types.TaskModel{
 		User:     user,
 		Name:     "Первая",
-		Deadline: time.Date(2026, 03, 13, 17, 50, 00, 0, time.UTC),
+		Deadline: timeNow.Add(time.Hour * 2),
 		Status:   types.TaskStatusInWork,
 	}
 	task2 := types.TaskModel{
 		User:     user,
 		Name:     "вторая",
-		Deadline: time.Date(2026, 03, 13, 17, 49, 00, 0, time.UTC),
+		Deadline: timeNow.Add(time.Minute * 1),
 		Status:   types.TaskStatusInWork,
 	}
 	task3 := types.TaskModel{
 		User:     user,
 		Name:     "третья",
-		Deadline: time.Date(2026, 03, 13, 17, 52, 00, 0, time.UTC),
+		Deadline: timeNow.Add(time.Hour * 9),
 		Status:   types.TaskStatusInWork,
 	}
 	if _, err := s.Repository.CreateTask(task1); err != nil {

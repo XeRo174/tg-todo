@@ -170,8 +170,11 @@ func (s *Service) ConversationCreateTaskSetDeadline(b *gotgbot.Bot, ctx *ext.Con
 			}
 		}
 	}
-	//time.Utc заменить на user.Timezone
-	deadline := time.Date(year, time.Month(month), day, hour, minute, 0, 0, time.UTC)
+	loc, err := time.LoadLocation(user.TimeZone)
+	if err != nil {
+		loc = time.UTC
+	}
+	deadline := time.Date(year, time.Month(month), day, hour, minute, 0, 0, loc)
 	task.Deadline = deadline
 	if err = s.Repository.UpdateTask(task); err != nil {
 		return fmt.Errorf("обновление сроков задачи: %w", err)

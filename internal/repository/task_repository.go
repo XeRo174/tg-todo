@@ -67,6 +67,7 @@ func handleTaskPreload(query *gorm.DB) *gorm.DB {
 		Joins("left join message_register_models on message_register_models.task_id=task_models.id")
 
 	query = query.
+		Preload("User").
 		Preload("Themes").
 		Preload("Messages")
 

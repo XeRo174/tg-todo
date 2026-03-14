@@ -148,5 +148,14 @@ const (
 )
 
 const (
+	TasLastCheckNone = iota
+	TaskLastCheck24H
+	TaskLastCheck8H
+	TaskLastCheck1H
+	TaskLastCheck10M
+	TaskLastCheckExpired
+)
+
+const (
 	ErrorStrokeFindUserByTG = "поиск пользователя по tg"
 )

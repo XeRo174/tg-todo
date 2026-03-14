@@ -29,5 +29,5 @@ type TaskFilter struct {
 	UserTGId   int64
 	Status     int
 	Priority   int
-	Deadline   time.Time // todo тип значения для поиска по времени ?
+	Deadline   time.Time
 }

@@ -8,6 +8,7 @@ import (
 type UserModel struct {
 	gorm.Model
 	TGId     int64
+	ChatId   int64
 	Username string
 	TimeZone string
 	Messages []MessageRegisterModel `gorm:"foreignKey:UserId"`
@@ -24,14 +25,15 @@ type ThemeModel struct {
 
 type TaskModel struct {
 	gorm.Model
-	Name     string
-	Status   TaskStatus
-	Priority TaskPriority
-	User     UserModel
-	UserId   uint
-	Themes   []ThemeModel `gorm:"many2many:task_themes;"`
-	Deadline time.Time
-	Messages []MessageRegisterModel `gorm:"foreignkey:TaskId"`
+	Name      string
+	Status    TaskStatus
+	Priority  TaskPriority
+	User      UserModel
+	UserId    uint
+	Themes    []ThemeModel `gorm:"many2many:task_themes;"`
+	Deadline  time.Time
+	Messages  []MessageRegisterModel `gorm:"foreignkey:TaskId"`
+	LastCheck int
 }
 
 type MessageRegisterModel struct {
